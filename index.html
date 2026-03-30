@@ -10,52 +10,327 @@
 <title>Cube 3D Finance</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'DM Sans',sans-serif;background:#F7F6F3;-webkit-tap-highlight-color:transparent;overscroll-behavior-y: contain;}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .spinner{width:24px;height:24px;border:3px solid #E8E6E1;border-top:3px solid #2D5A27;border-radius:50%;animation:spin 0.8s linear infinite}
-</style>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;background:#F7F6F3;-webkit-tap-highlight-color:transparent}</style>
 </head>
 <body>
 <div id="root"></div>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-
 <script type="text/babel">
-const { useState, useEffect, useCallback, useMemo } = React;
+const{useState,useEffect,useCallback}=React;
+const API_URL="https://script.google.com/macros/s/AKfycbxtRIEhkYHpW9iNkOydrLOq96yfbN-GciPzIq6FUkSfsjZjqjP11gb1QC8Tp02zNgYTyQ/exec";
 
-// --- CONFIG & UTILS ---
-const API_URL = "https://script.google.com/macros/s/AKfycbxtRIEhkYHpW9iNkOydrLOq96yfbN-GciPzIq6FUkSfsjZjqjP11gb1QC8Tp02zNgYTyQ/exec";
-
-const api = {
-  async get(action) {
-    try {
-      const r = await fetch(`${API_URL}?action=${action}`);
-      return await r.json();
-    } catch (e) { console.error(e); return null; }
-  },
-  async post(data) {
-    try {
-      const r = await fetch(API_URL, { method: "POST", body: JSON.stringify(data) });
-      return await r.json();
-    } catch (e) { console.error(e); return null; }
-  },
+const api={
+  async get(action){try{const r=await fetch(`${API_URL}?action=${action}`);return await r.json()}catch(e){console.error(e);return null}},
+  async post(data){try{const r=await fetch(API_URL,{method:"POST",body:JSON.stringify(data)});return await r.json()}catch(e){console.error(e);return null}},
 };
 
-// Fixed Formatting to prevent NaN
-const fmt = (n) => {
-  let num = typeof n === 'string' ? parseFloat(n.replace(/[^0-9.-]+/g, "")) : n;
-  if (num === null || num === undefined || isNaN(num)) return "$0";
-  const a = Math.abs(num);
-  const s = a >= 1000 ? a.toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 0}) : a.toFixed(0);
-  return num < 0 ? `-$${s}` : `$${s}`;
-};
+const fmt=(n)=>{if(n===null||n===undefined||isNaN(n))return"$0";const a=Math.abs(n);const s=a>=1000?a.toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0}):a.toString();return n<0?`-$${s}`:`$${s}`};
+const pct=(n)=>`${(n*100).toFixed(1)}%`;
 
-const pct = (n) => `${(n * 100).toFixed(1)}%`;
+const FONT="'DM Sans',sans-serif";
+const MONO="'JetBrains Mono',monospace";
+const C={bg:"#F7F6F3",card:"#FFFFFF",border:"#E8E6E1",text:"#1A1A1A",sub:"#6B6B6B",muted:"#9B9B9B",accent:"#2D5A27",accentLight:"#E8F0E7",red:"#C53030",redLight:"#FFF0F0",blue:"#2B6CB0",blueLight:"#EBF4FF",amber:"#B7791F",amberLight:"#FFFAF0",gold:"#A67C00",goldLight:"#FFF8E1"};
 
-const FONT = "'DM Sans',sans-serif";
-const MONO = "'JetBrains Mono',monospace";
-const C = { bg:"#F7F6F3", card:"#FFFFFF", border:"#E8E6E1", text:"#1A1A1A", sub:"#6B6B6B", muted:"#9B9B9B", accent:"#2D5
+function Icon({name,size=18,color=C.sub}){
+  const d={
+    home:"M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
+    chart:"M16 8v8m-8-4v4m4-12v12",
+    wallet:"M21 12V7H5a2 2 0 01-2-2m0 0a2 2 0 012-2h14v4M3 5v14a2 2 0 002 2h16v-5",
+    plus:"M12 5v14M5 12h14",
+    refresh:"M20.49 15a9 9 0 11-2.12-9.36L23 10",
+    car:"M5 17h2m10 0h2M3 11l1.5-5h15l1.5 5",
+    trending:"",
+  };
+  if(name==="ring")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8"><circle cx="12" cy="14" r="7"/><path d="M8 6L12 2l4 4"/></svg>;
+  if(name==="trending")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
+  if(name==="gold")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
+  if(name==="building")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8"><rect x="4" y="2" width="16" height="20" rx="1"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><path d="M10 22v-4h4v4"/></svg>;
+  if(name==="layers")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>;
+  if(name==="chart")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8"><path d={d.chart}/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>;
+  if(name==="refresh")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8"><polyline points="23 4 23 10 17 10"/><path d={d.refresh}/></svg>;
+  if(name==="car")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8"><path d={d.car}/><rect x="2" y="11" width="20" height="6" rx="1"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={name==="plus"?"2":"1.8"}><path d={d[name]||d.home}/></svg>;
+}
+
+function NavButton({icon,label,active,onClick}){
+  return <button onClick={onClick} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,background:active?C.accentLight:"transparent",border:"none",borderRadius:12,padding:"8px 20px",cursor:"pointer",minWidth:68}}>
+    <Icon name={icon} size={20} color={active?C.accent:C.muted}/>
+    <span style={{fontSize:11,fontWeight:active?600:400,color:active?C.accent:C.muted,fontFamily:FONT}}>{label}</span>
+  </button>;
+}
+
+function Card({children,style}){return <div style={{background:C.card,borderRadius:16,padding:20,border:`1px solid ${C.border}`,...style}}>{children}</div>}
+
+function StatCard({label,value,icon,color=C.accent,bg=C.accentLight}){
+  return <Card style={{display:"flex",alignItems:"flex-start",gap:14}}>
+    <div style={{width:40,height:40,borderRadius:12,background:bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name={icon} size={18} color={color}/></div>
+    <div style={{flex:1}}><div style={{fontSize:12,color:C.sub,fontWeight:500,marginBottom:4}}>{label}</div><div style={{fontSize:20,fontWeight:700,color:C.text,fontFamily:MONO}}>{value}</div></div>
+  </Card>;
+}
+
+function InputField({label,type="text",value,onChange,placeholder}){
+  return <div><label style={{fontSize:11,fontWeight:600,color:C.sub,marginBottom:4,display:"block"}}>{label}</label>
+  <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{width:"100%",padding:"10px 12px",border:`1px solid ${C.border}`,borderRadius:10,fontSize:14,fontFamily:FONT,background:C.bg,outline:"none",boxSizing:"border-box",color:C.text}}/></div>;
+}
+function SelectField({label,value,options,onChange}){
+  return <div><label style={{fontSize:11,fontWeight:600,color:C.sub,marginBottom:4,display:"block"}}>{label}</label>
+  <select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",padding:"10px 12px",border:`1px solid ${C.border}`,borderRadius:10,fontSize:14,fontFamily:FONT,background:C.bg,outline:"none",boxSizing:"border-box",color:C.text,cursor:"pointer"}}>
+    {options.map(o=><option key={o} value={o}>{o}</option>)}
+  </select></div>;
+}
+function PageLoader(){return <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:60,gap:12}}><div style={{width:32,height:32,border:`3px solid ${C.border}`,borderTop:`3px solid ${C.accent}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/><span style={{fontSize:13,color:C.muted}}>Loading...</span><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>}
+
+// --- TRANSACTIONS ---
+function TransactionsPage({data,dashData,onAdd,onRefresh,loading}){
+  const[showForm,setShowForm]=useState(false);
+  const[form,setForm]=useState({date:new Date().toISOString().split("T")[0],amount:"",account:"Home",notes:""});
+  const[filter,setFilter]=useState("All");
+  const[saving,setSaving]=useState(false);
+  if(!data)return <PageLoader/>;
+  const accts=dashData?.accounts;
+  const filters=["All","Home","Portfolio","Lifestyle","Wedding"];
+  const filtered=filter==="All"?data.transactions:data.transactions.filter(t=>t.account===filter);
+  const handleSubmit=async()=>{if(!form.amount||!form.notes)return;setSaving(true);await onAdd(form);setShowForm(false);setForm({date:new Date().toISOString().split("T")[0],amount:"",account:"Home",notes:""});setSaving(false)};
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div><h2 style={{margin:0,fontSize:22,fontWeight:700}}>Transactions</h2><p style={{margin:"4px 0 0",fontSize:13,color:C.sub}}>Total Cash: <strong style={{fontFamily:MONO,color:C.text}}>{fmt(data.balance)}</strong></p></div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={onRefresh} disabled={loading} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,width:38,height:38,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="refresh" size={16} color={C.sub}/></button>
+        <button onClick={()=>setShowForm(!showForm)} style={{background:C.accent,border:"none",borderRadius:10,width:38,height:38,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="plus" size={18} color="#fff"/></button>
+      </div>
+    </div>
+    {accts&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+      {[{label:"Home",val:accts.home,icon:"home",color:C.accent,bg:C.accentLight},{label:"Portfolio",val:accts.portfolio,icon:"chart",color:C.blue,bg:C.blueLight},{label:"Lifestyle",val:accts.lifestyle,icon:"wallet",color:C.amber,bg:C.amberLight}].map(a=>
+        <Card key={a.label} style={{padding:12,textAlign:"center"}}>
+          <div style={{width:28,height:28,borderRadius:8,background:a.bg,display:"inline-flex",alignItems:"center",justifyContent:"center",marginBottom:6}}><Icon name={a.icon} size={13} color={a.color}/></div>
+          <div style={{fontSize:9,color:C.sub,fontWeight:700,letterSpacing:0.6,marginBottom:3}}>{a.label.toUpperCase()}</div>
+          <div style={{fontSize:15,fontWeight:700,fontFamily:MONO,color:C.text}}>${Number(a.val).toLocaleString()}</div>
+        </Card>
+      )}
+    </div>}
+    {showForm&&<Card style={{border:`2px solid ${C.accent}`}}>
+      <div style={{fontSize:14,fontWeight:700,marginBottom:14}}>New Transaction</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <InputField label="Date" type="date" value={form.date} onChange={v=>setForm({...form,date:v})}/>
+          <InputField label="Amount" type="number" value={form.amount} onChange={v=>setForm({...form,amount:v})} placeholder="-500 or 3000"/>
+        </div>
+        <SelectField label="Account" value={form.account} options={["Home","Portfolio","Lifestyle","Wedding","Home > Portfolio","Portfolio > Home","Home > Lifestyle","Lifestyle > Home"]} onChange={v=>setForm({...form,account:v})}/>
+        <InputField label="Notes" value={form.notes} onChange={v=>setForm({...form,notes:v})} placeholder="e.g. salary, groceries"/>
+        <button onClick={handleSubmit} disabled={saving} style={{background:C.accent,color:"#fff",border:"none",borderRadius:10,padding:"12px 0",fontWeight:600,fontSize:14,cursor:"pointer",fontFamily:FONT,opacity:saving?0.6:1}}>{saving?"Saving...":"Add Transaction"}</button>
+      </div>
+    </Card>}
+    <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4}}>
+      {filters.map(a=><button key={a} onClick={()=>setFilter(a)} style={{background:filter===a?C.accent:C.card,color:filter===a?"#fff":C.sub,border:filter===a?"none":`1px solid ${C.border}`,borderRadius:20,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",fontFamily:FONT}}>{a}</button>)}
+    </div>
+    <Card style={{padding:0,overflow:"hidden"}}>
+      {filtered.length===0?<div style={{padding:40,textAlign:"center",color:C.muted,fontSize:14}}>No transactions found</div>:
+      filtered.map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",padding:"14px 20px",borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",gap:12}}>
+        <div style={{width:36,height:36,borderRadius:10,background:t.amount<0?C.redLight:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <span style={{fontSize:14}}>{t.account==="Wedding"?"\u{1F48D}":t.account==="Home"?"\u{1F3E0}":t.account==="Portfolio"?"\u{1F4C8}":t.account==="Lifestyle"?"\u2728":"\u2194"}</span>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.notes}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2}}>{t.account} · {t.date}</div>
+        </div>
+        <div style={{fontSize:15,fontWeight:700,fontFamily:MONO,color:t.amount<0?C.red:C.accent,flexShrink:0}}>{t.amount<0?`-$${Math.abs(t.amount).toLocaleString()}`:`+$${t.amount.toLocaleString()}`}</div>
+      </div>)}
+    </Card>
+  </div>;
+}
+
+// --- ASSETS ---
+function AssetsPage({data,dashData,onUpdateGold,onRefresh,loading}){
+  const[editGold,setEditGold]=useState(false);
+  const[goldInput,setGoldInput]=useState("");
+  if(!data||!dashData)return <PageLoader/>;
+  const nw=dashData.netWorth;
+  const handleGoldUpdate=async()=>{if(!goldInput)return;await onUpdateGold(Number(goldInput));setEditGold(false);setGoldInput("")};
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div><h2 style={{margin:0,fontSize:22,fontWeight:700}}>Assets</h2><p style={{margin:"4px 0 0",fontSize:13,color:C.sub}}>Net worth & holdings</p></div>
+      <button onClick={onRefresh} disabled={loading} style={{background:C.accentLight,border:"none",borderRadius:10,width:38,height:38,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:loading?0.5:1}}><Icon name="refresh" size={16} color={C.accent}/></button>
+    </div>
+    <Card style={{background:`linear-gradient(135deg,${C.accent},#1B3B17)`,border:"none",padding:28}}>
+      <div style={{color:"rgba(255,255,255,0.7)",fontSize:13,fontWeight:500,marginBottom:6}}>NET WORTH</div>
+      <div style={{color:"#fff",fontSize:36,fontWeight:800,fontFamily:MONO,letterSpacing:-1}}>{fmt(nw.total)}</div>
+      <div style={{display:"flex",gap:16,marginTop:16,flexWrap:"wrap"}}>
+        {[{label:"Cash",val:nw.totalCash},{label:"Gold",val:nw.goldReserve},{label:"Property",val:nw.property},{label:"IBKR",val:nw.ibkr}].map(item=>
+          <div key={item.label} style={{flex:"1 1 auto",minWidth:70}}>
+            <div style={{color:"rgba(255,255,255,0.5)",fontSize:10,fontWeight:600,letterSpacing:0.5,marginBottom:2}}>{item.label.toUpperCase()}</div>
+            <div style={{color:"#fff",fontSize:15,fontWeight:600,fontFamily:MONO}}>{fmt(item.val)}</div>
+          </div>
+        )}
+      </div>
+    </Card>
+    <Card style={{background:"linear-gradient(135deg,#A67C00,#7A5C00)",border:"none",padding:24}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div>
+          <div style={{color:"rgba(255,255,255,0.6)",fontSize:12,fontWeight:600,letterSpacing:0.5}}>GOLD RESERVE</div>
+          <div style={{color:"#fff",fontSize:28,fontWeight:800,fontFamily:MONO,marginTop:6}}>{fmt(data.totalGoldValue)}</div>
+          <div style={{color:"rgba(255,255,255,0.6)",fontSize:13,marginTop:4}}>{data.totalGoldOz} troy oz @ ${data.goldPrice.toLocaleString()}/oz</div>
+        </div>
+        <button onClick={()=>{setEditGold(!editGold);setGoldInput(String(data.goldPrice))}} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:FONT}}>Update Price</button>
+      </div>
+      {editGold&&<div style={{display:"flex",gap:8,marginTop:14}}>
+        <input type="number" value={goldInput} onChange={e=>setGoldInput(e.target.value)} placeholder="New price/oz" style={{flex:1,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,padding:"8px 12px",color:"#fff",fontSize:14,fontFamily:MONO,outline:"none"}}/>
+        <button onClick={handleGoldUpdate} style={{background:"#fff",color:C.gold,border:"none",borderRadius:8,padding:"8px 16px",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:FONT}}>Save</button>
+      </div>}
+    </Card>
+    <Card>
+      <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>Gold Holdings</div>
+      {data.goldEntries.map((g,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<data.goldEntries.length-1?`1px solid ${C.border}`:"none"}}>
+        <div><div style={{fontSize:13,fontWeight:600}}>{g.description}</div><div style={{fontSize:11,color:C.muted}}>{g.date} · {g.weight} {g.unit}</div></div>
+        <div style={{fontSize:15,fontWeight:700,fontFamily:MONO,color:C.gold}}>{fmt(g.value)}</div>
+      </div>)}
+    </Card>
+    <Card>
+      <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>Property & Vehicles</div>
+      {data.properties.map((p,i)=><div key={i} style={{display:"flex",alignItems:"center",padding:"10px 0",borderBottom:i<data.properties.length-1?`1px solid ${C.border}`:"none",gap:12}}>
+        <div style={{width:36,height:36,borderRadius:10,background:p.type==="Property"?C.blueLight:C.amberLight,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name={p.type==="Property"?"building":"car"} size={16} color={p.type==="Property"?C.blue:C.amber}/></div>
+        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{p.name}</div><div style={{fontSize:11,color:C.muted}}>{p.type}</div></div>
+        <div style={{fontSize:15,fontWeight:700,fontFamily:MONO}}>{fmt(p.value)}</div>
+      </div>)}
+      <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 0",borderTop:`2px solid ${C.border}`,marginTop:4}}>
+        <span style={{fontSize:13,fontWeight:700}}>Total</span>
+        <span style={{fontSize:16,fontWeight:800,fontFamily:MONO}}>{fmt(data.properties.reduce((s,p)=>s+p.value,0))}</span>
+      </div>
+    </Card>
+  </div>;
+}
+
+// --- WEDDING ---
+function WeddingPage({data,txData,onRefresh,loading}){
+  if(!data)return <PageLoader/>;
+  const spent=Math.abs(data.totalSpent);const progress=Math.min(data.percentUsed,1);
+  const weddingTxs=txData?txData.transactions.filter(t=>t.account==="Wedding"||(t.account&&t.account.includes("Wedding"))):[];
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div><h2 style={{margin:0,fontSize:22,fontWeight:700}}>Wedding</h2><p style={{margin:"4px 0 0",fontSize:13,color:C.sub}}>Budget tracker</p></div>
+      <button onClick={onRefresh} disabled={loading} style={{background:C.accentLight,border:"none",borderRadius:10,width:38,height:38,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="refresh" size={16} color={C.accent}/></button>
+    </div>
+    <Card style={{background:"linear-gradient(135deg,#8B5CF6,#6D28D9)",border:"none",padding:24}}>
+      <div style={{color:"rgba(255,255,255,0.6)",fontSize:12,fontWeight:600,letterSpacing:0.5}}>REMAINING BUDGET</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginTop:8}}>
+        <div style={{color:"#fff",fontSize:32,fontWeight:800,fontFamily:MONO}}>{fmt(data.remaining)}</div>
+        <div style={{color:"rgba(255,255,255,0.7)",fontSize:14}}>of {fmt(data.totalBudget)}</div>
+      </div>
+      <div style={{marginTop:16,background:"rgba(255,255,255,0.15)",borderRadius:6,height:8,overflow:"hidden"}}><div style={{width:`${progress*100}%`,height:"100%",background:"#fff",borderRadius:6}}/></div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
+        <span style={{color:"rgba(255,255,255,0.6)",fontSize:12}}>Spent: {fmt(spent)}</span>
+        <span style={{color:"rgba(255,255,255,0.6)",fontSize:12}}>{pct(progress)} used</span>
+      </div>
+    </Card>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <StatCard label="Total Budget" value={fmt(data.totalBudget)} icon="wallet" color={C.blue} bg={C.blueLight}/>
+      <StatCard label="Total Spent" value={fmt(spent)} icon="trending" color={C.red} bg={C.redLight}/>
+    </div>
+    <Card>
+      <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>Wedding Payments</div>
+      {weddingTxs.length===0?<div style={{padding:20,textAlign:"center",color:C.muted,fontSize:13}}>No wedding transactions yet</div>:
+      weddingTxs.map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<weddingTxs.length-1?`1px solid ${C.border}`:"none"}}>
+        <div><div style={{fontSize:13,fontWeight:600}}>{t.notes}</div><div style={{fontSize:11,color:C.muted}}>{t.date}</div></div>
+        <div style={{fontSize:14,fontWeight:700,fontFamily:MONO,color:C.red}}>{fmt(t.amount)}</div>
+      </div>)}
+    </Card>
+  </div>;
+}
+
+// --- INVESTMENTS ---
+function InvestmentsPage({data,onRefresh,loading}){
+  if(!data)return <PageLoader/>;
+  const maxVal=Math.max(...data.projections.map(p=>p.portfolioValue));
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div><h2 style={{margin:0,fontSize:22,fontWeight:700}}>Investments</h2><p style={{margin:"4px 0 0",fontSize:13,color:C.sub}}>IBKR Portfolio</p></div>
+      <button onClick={onRefresh} disabled={loading} style={{background:C.accentLight,border:"none",borderRadius:10,width:38,height:38,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="refresh" size={16} color={C.accent}/></button>
+    </div>
+    <Card style={{background:`linear-gradient(135deg,${C.blue},#1A365D)`,border:"none",padding:24}}>
+      <div style={{color:"rgba(255,255,255,0.6)",fontSize:12,fontWeight:600,letterSpacing:0.5}}>IBKR BALANCE</div>
+      <div style={{color:"#fff",fontSize:32,fontWeight:800,fontFamily:MONO,marginTop:6}}>{fmt(data.balance)}</div>
+      <div style={{display:"flex",gap:20,marginTop:16}}>
+        {[{label:"MONTHLY",val:fmt(data.monthlyContribution)},{label:"RETURN",val:pct(data.annualReturn)},{label:"CONTRIBUTED",val:fmt(data.totalContributed)}].map(s=>
+          <div key={s.label}><div style={{color:"rgba(255,255,255,0.5)",fontSize:10,fontWeight:600}}>{s.label}</div><div style={{color:"#fff",fontSize:15,fontWeight:600,fontFamily:MONO}}>{s.val}</div></div>
+        )}
+      </div>
+    </Card>
+    <Card>
+      <div style={{fontSize:14,fontWeight:700,marginBottom:14}}>Target Allocation</div>
+      {data.allocations.map((a,i)=><div key={i} style={{marginBottom:i<data.allocations.length-1?14:0}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{fontSize:13,fontWeight:600}}>{a.etf}</span>
+          <span style={{fontSize:13,fontWeight:700,fontFamily:MONO,color:C.accent}}>{pct(a.target)}</span>
+        </div>
+        <div style={{background:C.bg,borderRadius:4,height:6,overflow:"hidden"}}><div style={{width:`${a.target*100}%`,height:"100%",background:i===0?C.accent:i===1?C.blue:C.gold,borderRadius:4}}/></div>
+      </div>)}
+    </Card>
+    <Card>
+      <div style={{fontSize:14,fontWeight:700,marginBottom:14}}>10-Year Projection</div>
+      {data.projections.map((p,i)=>{const barW=maxVal>0?(p.portfolioValue/maxVal)*100:0;const savedW=maxVal>0?(p.ifSaved/maxVal)*100:0;
+        return <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0"}}>
+          <div style={{width:50,fontSize:11,color:C.sub,fontWeight:600,flexShrink:0}}>{p.year.replace("Year ","Yr ")}</div>
+          <div style={{flex:1,position:"relative",height:18}}>
+            <div style={{position:"absolute",top:0,left:0,width:`${barW}%`,height:"100%",background:`linear-gradient(90deg,${C.accentLight},${C.accent}40)`,borderRadius:4}}/>
+            <div style={{position:"absolute",top:6,left:0,width:`${savedW}%`,height:6,background:`${C.muted}30`,borderRadius:3}}/>
+          </div>
+          <div style={{width:70,fontSize:11,fontWeight:700,fontFamily:MONO,color:C.accent,textAlign:"right",flexShrink:0}}>{fmt(p.portfolioValue)}</div>
+        </div>})}
+      <div style={{display:"flex",gap:16,marginTop:12,fontSize:11,color:C.muted}}><span>■ With returns</span><span style={{opacity:0.5}}>■ If just saved</span></div>
+    </Card>
+  </div>;
+}
+
+// --- APP ---
+function App(){
+  const[page,setPage]=useState("transactions");
+  const[loading,setLoading]=useState(false);
+  const[dashboard,setDashboard]=useState(null);
+  const[transactions,setTransactions]=useState(null);
+  const[assets,setAssets]=useState(null);
+  const[wedding,setWedding]=useState(null);
+  const[investments,setInvestments]=useState(null);
+
+  const load=useCallback(async(section)=>{
+    setLoading(true);
+    if(section==="dashboard"||section==="all")setDashboard(await api.get("getDashboard"));
+    if(section==="transactions"||section==="all")setTransactions(await api.get("getTransactions"));
+    if(section==="assets"||section==="all")setAssets(await api.get("getAssets"));
+    if(section==="wedding"||section==="all")setWedding(await api.get("getWedding"));
+    if(section==="investments"||section==="all")setInvestments(await api.get("getInvestments"));
+    setLoading(false);
+  },[]);
+
+  useEffect(()=>{load("all")},[load]);
+
+  const addTransaction=async(form)=>{await api.post({action:"addTransaction",...form});await load("transactions");await load("dashboard")};
+  const updateGoldPrice=async(price)=>{await api.post({action:"updateGoldPrice",price});await load("assets");await load("dashboard")};
+
+  return <div style={{fontFamily:FONT,background:C.bg,minHeight:"100vh",color:C.text,maxWidth:480,margin:"0 auto",position:"relative"}}>
+    <div style={{padding:"16px 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:32,height:32,borderRadius:10,background:C.accent,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontWeight:800,fontSize:16,fontFamily:MONO}}>C</span></div>
+        <span style={{fontSize:16,fontWeight:800,letterSpacing:-0.3}}>Cube 3D Finance</span>
+      </div>
+      <div style={{fontSize:11,color:C.muted,fontFamily:MONO}}>{new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
+    </div>
+    <div style={{padding:"0 16px 100px"}}>
+      {page==="transactions"&&<TransactionsPage data={transactions} dashData={dashboard} onAdd={addTransaction} onRefresh={()=>{load("transactions");load("dashboard")}} loading={loading}/>}
+      {page==="assets"&&<AssetsPage data={assets} dashData={dashboard} onUpdateGold={updateGoldPrice} onRefresh={()=>{load("assets");load("dashboard")}} loading={loading}/>}
+      {page==="wedding"&&<WeddingPage data={wedding} txData={transactions} onRefresh={()=>{load("wedding");load("transactions")}} loading={loading}/>}
+      {page==="investments"&&<InvestmentsPage data={investments} onRefresh={()=>load("investments")} loading={loading}/>}
+    </div>
+    <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"rgba(255,255,255,0.95)",backdropFilter:"blur(12px)",borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-around",padding:"6px 8px env(safe-area-inset-bottom, 10px)",zIndex:100}}>
+      <NavButton icon="wallet" label="Txns" active={page==="transactions"} onClick={()=>setPage("transactions")}/>
+      <NavButton icon="layers" label="Assets" active={page==="assets"} onClick={()=>setPage("assets")}/>
+      <NavButton icon="ring" label="Wedding" active={page==="wedding"} onClick={()=>setPage("wedding")}/>
+      <NavButton icon="trending" label="Invest" active={page==="investments"} onClick={()=>setPage("investments")}/>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
