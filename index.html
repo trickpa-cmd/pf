@@ -42,7 +42,7 @@
     },
     async post(data) {
       try {
-        const r = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+        const r = await fetch(API_URL, { method: "POST", body: JSON.stringify(data) });
         return await r.json();
       } catch (e) {
         console.error(e);
@@ -104,23 +104,29 @@
   }
   function TransactionsPage({ data, dashData, onAdd, onRefresh, onDelete, loading }) {
     const [showForm, setShowForm] = useState(false);
-    const [form, setForm] = useState({ date: (/* @__PURE__ */ new Date()).toISOString().split("T")[0], amount: "", account: "Home", notes: "" });
+    const [form, setForm] = useState({ date: (new Date()).toISOString().split("T")[0], amount: "", account: "Home", notes: "" });
     const [filter, setFilter] = useState("All");
     const [saving, setSaving] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
-    if (!data) return /* @__PURE__ */ React.createElement(PageLoader, null);
+    if (!data) return React.createElement(PageLoader, null);
     const accts = dashData?.accounts;
     const filters = ["All", "Home", "Portfolio", "Lifestyle", "Wedding"];
     const transactionsList = Array.isArray(data.transactions) ? data.transactions : [];
     const filtered = filter === "All" ? transactionsList : transactionsList.filter((t) => t.account === filter);
     const handleSubmit = async () => {
-      if (!String(form.amount).trim() || !form.notes.trim()) return;
+      const amountText = String(form.amount || "").trim();
+      const notesText = String(form.notes || "").trim();
+      if (!amountText || !notesText) return;
       setSaving(true);
-      await onAdd({ ...form, amount: toNum(form.amount) });
-      setShowForm(false);
-      setForm({ date: (/* @__PURE__ */ new Date()).toISOString().split("T")[0], amount: "", account: "Home", notes: "" });
+      const result = await onAdd({ ...form, amount: amountText });
       setSaving(false);
+      if (result && result.ok === false) {
+        alert(result.message || "Could not add transaction.");
+        return;
+      }
+      setShowForm(false);
+      setForm({ date: (new Date()).toISOString().split("T")[0], amount: "", account: "Home", notes: "" });
     };
     const handleDelete = async () => {
       if (!deleteTarget) return;
@@ -133,11 +139,68 @@
       }
       setDeleteTarget(null);
     };
-    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { style: { margin: 0, fontSize: 22, fontWeight: 700 } }, "Transactions"), /* @__PURE__ */ React.createElement("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "Total Cash: ", /* @__PURE__ */ React.createElement("strong", { style: { fontFamily: MONO, color: C.text } }, fmt(data.balance)))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: onRefresh, disabled: loading, style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement(Icon, { name: "refresh", size: 16, color: C.sub })), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowForm(!showForm), style: { background: C.accent, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement(Icon, { name: "plus", size: 18, color: "#fff" })))), accts && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } }, [{ label: "Home", val: accts.home, icon: "home", color: C.accent, bg: C.accentLight }, { label: "Portfolio", val: accts.portfolio, icon: "chart", color: C.blue, bg: C.blueLight }, { label: "Lifestyle", val: accts.lifestyle, icon: "wallet", color: C.amber, bg: C.amberLight }].map((a) => /* @__PURE__ */ React.createElement(Card, { key: a.label, style: { padding: 12, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, borderRadius: 8, background: a.bg, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 6 } }, /* @__PURE__ */ React.createElement(Icon, { name: a.icon, size: 13, color: a.color })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: C.sub, fontWeight: 700, letterSpacing: 0.6, marginBottom: 3 } }, a.label.toUpperCase()), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: C.text } }, fmt(a.val))))), showForm && /* @__PURE__ */ React.createElement(Card, { style: { border: `2px solid ${C.accent}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14 } }, "New Transaction"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement(InputField, { label: "Date", type: "date", value: form.date, onChange: (v) => setForm({ ...form, date: v }) }), /* @__PURE__ */ React.createElement(InputField, { label: "Amount", type: "text", inputMode: "decimal", pattern: "-?[0-9]*[.]?[0-9]*", value: form.amount, onChange: (v) => setForm({ ...form, amount: v }), placeholder: "-500 or 3000" })), /* @__PURE__ */ React.createElement(SelectField, { label: "Account", value: form.account, options: ["Home", "Portfolio", "Lifestyle", "Wedding", "Home > Portfolio", "Portfolio > Home", "Home > Lifestyle", "Lifestyle > Home"], onChange: (v) => setForm({ ...form, account: v }) }), /* @__PURE__ */ React.createElement(InputField, { label: "Notes", value: form.notes, onChange: (v) => setForm({ ...form, notes: v }), placeholder: "e.g. salary, groceries" }), /* @__PURE__ */ React.createElement("button", { onClick: handleSubmit, disabled: saving, style: { background: C.accent, color: "#fff", border: "none", borderRadius: 10, padding: "12px 0", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT, opacity: saving ? 0.6 : 1 } }, saving ? "Saving..." : "Add Transaction"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 } }, filters.map((a) => /* @__PURE__ */ React.createElement("button", { key: a, onClick: () => setFilter(a), style: { background: filter === a ? C.accent : C.card, color: filter === a ? "#fff" : C.sub, border: filter === a ? "none" : `1px solid ${C.border}`, borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: FONT } }, a))), /* @__PURE__ */ React.createElement(Card, { style: { padding: 0, overflow: "hidden" } }, filtered.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: C.muted, fontSize: 14 } }, "No transactions found") : filtered.map((t, i) => /* @__PURE__ */ React.createElement("div", { key: `${t.date || ""}-${t.account || ""}-${t.notes || ""}-${t.amount || 0}-${i}`, style: { display: "flex", alignItems: "center", padding: "14px 20px", borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : "none", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: toNum(t.amount) < 0 ? C.redLight : C.accentLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, t.account === "Wedding" ? "💍" : t.account === "Home" ? "🏠" : t.account === "Portfolio" ? "📈" : t.account === "Lifestyle" ? "✨" : "↔")), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.notes), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, t.account, " • ", t.date)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, flexShrink: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: toNum(t.amount) < 0 ? C.red : C.accent } }, toNum(t.amount) < 0 ? `-$${Math.abs(toNum(t.amount)).toLocaleString()}` : `+$${toNum(t.amount).toLocaleString()}`), /* @__PURE__ */ React.createElement("button", { onClick: () => setDeleteTarget({ ...t, index: i }), style: { background: "transparent", color: C.red, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT } }, "Delete"))))), /* @__PURE__ */ React.createElement(ConfirmDialog, { open: !!deleteTarget, title: "Delete transaction?", message: deleteTarget ? `This will permanently delete:
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        React.createElement("div", null,
+          React.createElement("h2", { style: { margin: 0, fontSize: 22, fontWeight: 700 } }, "Transactions"),
+          React.createElement("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "Total Cash: ", React.createElement("strong", { style: { fontFamily: MONO, color: C.text } }, fmt(data.balance)))
+        ),
+        React.createElement("div", { style: { display: "flex", gap: 8 } },
+          React.createElement("button", { onClick: onRefresh, disabled: loading, style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.6 : 1 } }, React.createElement(Icon, { name: "refresh", size: 16, color: C.sub })),
+          React.createElement("button", { onClick: () => setShowForm(!showForm), style: { background: C.accent, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, React.createElement(Icon, { name: "plus", size: 18, color: "#fff" }))
+        )
+      ),
+      accts && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } },
+        [{ label: "Home", val: accts.home, icon: "home", color: C.accent, bg: C.accentLight }, { label: "Portfolio", val: accts.portfolio, icon: "chart", color: C.blue, bg: C.blueLight }, { label: "Lifestyle", val: accts.lifestyle, icon: "wallet", color: C.amber, bg: C.amberLight }].map((a) =>
+          React.createElement(Card, { key: a.label, style: { padding: 12, textAlign: "center" } },
+            React.createElement("div", { style: { width: 28, height: 28, borderRadius: 8, background: a.bg, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 6 } }, React.createElement(Icon, { name: a.icon, size: 13, color: a.color })),
+            React.createElement("div", { style: { fontSize: 9, color: C.sub, fontWeight: 700, letterSpacing: 0.6, marginBottom: 3 } }, a.label.toUpperCase()),
+            React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: C.text } }, fmt(a.val))
+          )
+        )
+      ),
+      showForm && React.createElement(Card, { style: { border: `2px solid ${C.accent}` } },
+        React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14 } }, "New Transaction"),
+        React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+            React.createElement(InputField, { label: "Date", type: "date", value: form.date, onChange: (v) => setForm({ ...form, date: v }) }),
+            React.createElement(InputField, { label: "Amount", type: "text", value: form.amount, onChange: (v) => setForm({ ...form, amount: v }), placeholder: "-500 or 3000", pattern: "^-?[0-9]*[.]?[0-9]*$" })
+          ),
+          React.createElement(SelectField, { label: "Account", value: form.account, options: ["Home", "Portfolio", "Lifestyle", "Wedding", "Home > Portfolio", "Portfolio > Home", "Home > Lifestyle", "Lifestyle > Home"], onChange: (v) => setForm({ ...form, account: v }) }),
+          React.createElement(InputField, { label: "Notes", value: form.notes, onChange: (v) => setForm({ ...form, notes: v }), placeholder: "e.g. salary, groceries" }),
+          React.createElement("button", { onClick: handleSubmit, disabled: saving, style: { background: C.accent, color: "#fff", border: "none", borderRadius: 10, padding: "12px 0", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT, opacity: saving ? 0.6 : 1 } }, saving ? "Saving..." : "Add Transaction")
+        )
+      ),
+      React.createElement("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 } },
+        filters.map((a) => React.createElement("button", { key: a, onClick: () => setFilter(a), style: { background: filter === a ? C.accent : C.card, color: filter === a ? "#fff" : C.sub, border: filter === a ? "none" : `1px solid ${C.border}`, borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: FONT } }, a))
+      ),
+      React.createElement(Card, { style: { padding: 0, overflow: "hidden" } },
+        filtered.length === 0 ? React.createElement("div", { style: { padding: 40, textAlign: "center", color: C.muted, fontSize: 14 } }, "No transactions found") :
+        filtered.map((t, i) => React.createElement("div", { key: `${t.date || ""}-${t.account || ""}-${t.notes || ""}-${t.amount || 0}-${i}`, style: { display: "flex", alignItems: "center", padding: "14px 16px", borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : "none", gap: 10 } },
+          React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: toNum(t.amount) < 0 ? C.redLight : C.accentLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, React.createElement("span", { style: { fontSize: 14 } }, t.account === "Wedding" ? "💍" : t.account === "Home" ? "🏠" : t.account === "Portfolio" ? "📈" : t.account === "Lifestyle" ? "✨" : "↔")),
+          React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.notes),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, t.account, " • ", t.date)
+          ),
+          React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: toNum(t.amount) < 0 ? C.red : C.accent, flexShrink: 0 } }, toNum(t.amount) < 0 ? `-$${Math.abs(toNum(t.amount)).toLocaleString()}` : `+$${toNum(t.amount).toLocaleString()}`),
+          React.createElement("button", { onClick: () => setDeleteTarget({ ...t, index: i }), title: "Delete transaction", style: { background: "transparent", color: C.red, border: "none", width: 28, height: 28, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 } },
+            React.createElement("svg", { width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: C.red, strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" },
+              React.createElement("polyline", { points: "3 6 5 6 21 6" }),
+              React.createElement("path", { d: "M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2" }),
+              React.createElement("path", { d: "M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" }),
+              React.createElement("line", { x1: "10", y1: "11", x2: "10", y2: "17" }),
+              React.createElement("line", { x1: "14", y1: "11", x2: "14", y2: "17" })
+            )
+          )
+        ))
+      ),
+      React.createElement(ConfirmDialog, { open: !!deleteTarget, title: "Delete transaction?", message: deleteTarget ? `This will permanently delete:
 ${deleteTarget.notes}
-${deleteTarget.account} • ${deleteTarget.date} • ${fmt(deleteTarget.amount)}` : "", confirmLabel: "Delete", onConfirm: handleDelete, onCancel: () => !deleting && setDeleteTarget(null), busy: deleting }));
+${deleteTarget.account} • ${deleteTarget.date} • ${fmt(deleteTarget.amount)}` : "", confirmLabel: "Delete", onConfirm: handleDelete, onCancel: () => !deleting && setDeleteTarget(null), busy: deleting })
+    );
   }
-  function AssetsPage({ data, dashData, onUpdateGold, onRefresh, loading }) {
+  
+function AssetsPage({ data, dashData, onUpdateGold, onRefresh, loading }) {
     const [editGold, setEditGold] = useState(false);
     const [goldInput, setGoldInput] = useState("");
     if (!data || !dashData) return /* @__PURE__ */ React.createElement(PageLoader, null);
@@ -150,10 +213,10 @@ ${deleteTarget.account} • ${deleteTarget.date} • ${fmt(deleteTarget.amount)}
     };
     return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { style: { margin: 0, fontSize: 22, fontWeight: 700 } }, "Assets"), /* @__PURE__ */ React.createElement("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "Net worth & holdings")), /* @__PURE__ */ React.createElement("button", { onClick: onRefresh, disabled: loading, style: { background: C.accentLight, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement(Icon, { name: "refresh", size: 16, color: C.accent }))), /* @__PURE__ */ React.createElement(Card, { style: { background: `linear-gradient(135deg,${C.accent},#1B3B17)`, border: "none", padding: 28 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 500, marginBottom: 6 } }, "NET WORTH"), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 36, fontWeight: 800, fontFamily: MONO, letterSpacing: -1 } }, fmt(nw.total)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" } }, [{ label: "Cash", val: nw.totalCash }, { label: "Gold", val: nw.goldReserve }, { label: "Property", val: nw.property }, { label: "IBKR", val: nw.ibkr }].map(
       (item) => /* @__PURE__ */ React.createElement("div", { key: item.label, style: { flex: "1 1 auto", minWidth: 70 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: 600, letterSpacing: 0.5, marginBottom: 2 } }, item.label.toUpperCase()), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 15, fontWeight: 600, fontFamily: MONO } }, fmt(item.val)))
-    ))), /* @__PURE__ */ React.createElement(Card, { style: { background: "linear-gradient(135deg,#A67C00,#7A5C00)", border: "none", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, "GOLD RESERVE"), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 28, fontWeight: 800, fontFamily: MONO, marginTop: 6 } }, fmt(data.totalGoldValue)), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 4 } }, data.totalGoldOz, " troy oz @ $", toNum(data.goldPrice).toLocaleString(), "/oz")), /* @__PURE__ */ React.createElement("button", { onClick: () => {
+    ))), /* @__PURE__ */ React.createElement(Card, { style: { background: "linear-gradient(135deg,#A67C00,#7A5C00)", border: "none", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, "GOLD RESERVE"), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 28, fontWeight: 800, fontFamily: MONO, marginTop: 6 } }, fmt(data.totalGoldValue)), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 4 } }, data.totalGoldOz, " troy oz @ $", toNum(data.goldPrice).toLocaleString(), "/oz")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => {
       setEditGold(!editGold);
       setGoldInput(String(data.goldPrice));
-    }, style: { background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT } }, "Update Price")), editGold && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 14 } }, /* @__PURE__ */ React.createElement("input", { type: "number", value: goldInput, onChange: (e) => setGoldInput(e.target.value), placeholder: "New price/oz", style: { flex: 1, background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 14, fontFamily: MONO, outline: "none" } }), /* @__PURE__ */ React.createElement("button", { onClick: handleGoldUpdate, style: { background: "#fff", color: C.gold, border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: FONT } }, "Save"))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Gold Holdings"), data.goldEntries.map((g, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < data.goldEntries.length - 1 ? `1px solid ${C.border}` : "none" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, g.description), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, g.date, " \xB7 ", g.weight, " ", g.unit)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: C.gold } }, fmt(toNum(g.value)))))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Property & Vehicles"), data.properties.map((p, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", padding: "10px 0", borderBottom: i < data.properties.length - 1 ? `1px solid ${C.border}` : "none", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: p.type === "Property" ? C.blueLight : C.amberLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ React.createElement(Icon, { name: p.type === "Property" ? "building" : "car", size: 16, color: p.type === "Property" ? C.blue : C.amber })), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, p.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, p.type)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO } }, fmt(toNum(p.value))))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "12px 0 0", borderTop: `2px solid ${C.border}`, marginTop: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "Total"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, fontWeight: 800, fontFamily: MONO } }, fmt(data.properties.reduce((s, p) => s + toNum(p.value), 0))))));
+    }, style: { background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT } }, "Update Price"), /* @__PURE__ */ React.createElement("a", { href: "https://goldprice.org/", target: "_blank", rel: "noopener noreferrer", style: { background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT, textDecoration: "none", display: "inline-block" } }, "Check Price"))), editGold && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 14 } }, /* @__PURE__ */ React.createElement("input", { type: "number", value: goldInput, onChange: (e) => setGoldInput(e.target.value), placeholder: "New price/oz", style: { flex: 1, background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 14, fontFamily: MONO, outline: "none" } }), /* @__PURE__ */ React.createElement("button", { onClick: handleGoldUpdate, style: { background: "#fff", color: C.gold, border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: FONT } }, "Save"))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Gold Holdings"), data.goldEntries.map((g, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < data.goldEntries.length - 1 ? `1px solid ${C.border}` : "none" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, g.description), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, g.date, " \xB7 ", g.weight, " ", g.unit)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: C.gold } }, fmt(toNum(g.value)))))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Property & Vehicles"), data.properties.map((p, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", padding: "10px 0", borderBottom: i < data.properties.length - 1 ? `1px solid ${C.border}` : "none", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: p.type === "Property" ? C.blueLight : C.amberLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ React.createElement(Icon, { name: p.type === "Property" ? "building" : "car", size: 16, color: p.type === "Property" ? C.blue : C.amber })), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, p.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, p.type)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO } }, fmt(toNum(p.value))))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "12px 0 0", borderTop: `2px solid ${C.border}`, marginTop: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "Total"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, fontWeight: 800, fontFamily: MONO } }, fmt(data.properties.reduce((s, p) => s + toNum(p.value), 0))))));
   }
   function WeddingPage({ data, txData, onRefresh, loading }) {
     if (!data) return /* @__PURE__ */ React.createElement(PageLoader, null);
@@ -173,7 +236,30 @@ ${deleteTarget.account} • ${deleteTarget.date} • ${fmt(deleteTarget.amount)}
       return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 50, fontSize: 11, color: C.sub, fontWeight: 600, flexShrink: 0 } }, p.year.replace("Year ", "Yr ")), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, position: "relative", height: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 0, left: 0, width: `${barW}%`, height: "100%", background: `linear-gradient(90deg,${C.accentLight},${C.accent}40)`, borderRadius: 4 } }), /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 6, left: 0, width: `${savedW}%`, height: 6, background: `${C.muted}30`, borderRadius: 3 } })), /* @__PURE__ */ React.createElement("div", { style: { width: 70, fontSize: 11, fontWeight: 700, fontFamily: MONO, color: C.accent, textAlign: "right", flexShrink: 0 } }, fmt(p.portfolioValue)));
     }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 12, fontSize: 11, color: C.muted } }, /* @__PURE__ */ React.createElement("span", null, "\u25A0 With returns"), /* @__PURE__ */ React.createElement("span", { style: { opacity: 0.5 } }, "\u25A0 If just saved"))));
   }
+
+  function LockScreen({ onUnlock }) {
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (password === "plko!!!1") {
+        setError("");
+        try { localStorage.setItem("personal_finance_unlocked", "true"); } catch (e2) {}
+        onUnlock();
+      } else {
+        setError("Wrong password");
+      }
+    };
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.bg } }, /* @__PURE__ */ React.createElement(Card, { style: { width: "100%", maxWidth: 360, padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 6, textAlign: "center" } }, "Personal Finance"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: C.sub, marginBottom: 18, textAlign: "center" } }, "Enter password to open the app"), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSubmit, style: { display: "flex", flexDirection: "column", gap: 12 } }, /* @__PURE__ */ React.createElement("input", { type: "password", value: password, onChange: (e) => {
+      setPassword(e.target.value);
+      if (error) setError("");
+    }, autoFocus: true, placeholder: "Password", style: { width: "100%", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text } }), error ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.red, marginTop: -4 } }, error) : null, /* @__PURE__ */ React.createElement("button", { type: "submit", style: { background: C.accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: FONT } }, "Unlock"))));
+  }
+
   function App() {
+    const [isUnlocked, setIsUnlocked] = useState(() => {
+      try { return localStorage.getItem("personal_finance_unlocked") === "true"; } catch (e) { return false; }
+    });
     const [page, setPage] = useState("transactions");
     const [loading, setLoading] = useState(false);
     const [dashboard, setDashboard] = useState(null);
@@ -198,11 +284,20 @@ ${deleteTarget.account} • ${deleteTarget.date} • ${fmt(deleteTarget.amount)}
       }
     }, []);
     useEffect(() => {
-      load("all");
+      load(["transactions", "dashboard"]);
     }, [load]);
+    useEffect(() => {
+      if (page === "assets" && !assets) load(["assets", "dashboard"]);
+      if (page === "wedding" && !wedding) load(["wedding", "transactions"]);
+      if (page === "investments" && !investments) load("investments");
+    }, [page, assets, wedding, investments, load]);
     const addTransaction = async (form) => {
-      await api.post({ action: "addTransaction", ...form });
+      const payload = { action: "addTransaction", ...form, amount: String(form.amount).trim() };
+      const result = await api.post(payload);
+      if (!result) return { ok: false, message: "No response from server." };
+      if (result.ok === false || result.success === false) return { ok: false, message: result.message || "Could not add transaction." };
       await load(["transactions", "dashboard"]);
+      return { ok: true };
     };
     const updateGoldPrice = async (price) => {
       await api.post({ action: "updateGoldPrice", price });
@@ -210,12 +305,12 @@ ${deleteTarget.account} • ${deleteTarget.date} • ${fmt(deleteTarget.amount)}
     };
     const deleteTransaction = async (transaction) => {
       const result = await api.post({ action: "deleteTransaction", transaction });
-      if (!result || result.success === false || result.ok === false) {
-        return { ok: false, message: result && (result.message || result.error) };
-      }
-      await load(["transactions", "dashboard", "wedding"]);
+      if (!result) return { ok: false, message: "No response from server." };
+      if (result.ok === false || result.success === false) return { ok: false, message: result.message || "Delete failed." };
+      await load(["transactions", "dashboard"]);
       return { ok: true };
     };
+    if (!isUnlocked) return /* @__PURE__ */ React.createElement(LockScreen, { onUnlock: () => setIsUnlocked(true) });
     return /* @__PURE__ */ React.createElement("div", { style: { fontFamily: FONT, background: C.bg, minHeight: "100vh", color: C.text, maxWidth: 480, margin: "0 auto", position: "relative" } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, fontWeight: 800, letterSpacing: -0.3 } }, "Personal Finance")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted, fontFamily: MONO } }, (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { month: "short", day: "numeric" }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "0 16px 100px" } }, page === "transactions" && /* @__PURE__ */ React.createElement(TransactionsPage, { data: transactions, dashData: dashboard, onAdd: addTransaction, onRefresh: () => load(["transactions", "dashboard"]), onDelete: deleteTransaction, loading }), page === "assets" && /* @__PURE__ */ React.createElement(AssetsPage, { data: assets, dashData: dashboard, onUpdateGold: updateGoldPrice, onRefresh: () => load(["assets", "dashboard"]), loading }), page === "wedding" && /* @__PURE__ */ React.createElement(WeddingPage, { data: wedding, txData: transactions, onRefresh: () => load(["wedding", "transactions"]), loading }), page === "investments" && /* @__PURE__ */ React.createElement(InvestmentsPage, { data: investments, onRefresh: () => load("investments"), loading })), /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-around", padding: "6px 8px env(safe-area-inset-bottom, 10px)", zIndex: 100 } }, /* @__PURE__ */ React.createElement(NavButton, { icon: "wallet", label: "Txns", active: page === "transactions", onClick: () => setPage("transactions") }), /* @__PURE__ */ React.createElement(NavButton, { icon: "layers", label: "Assets", active: page === "assets", onClick: () => setPage("assets") }), /* @__PURE__ */ React.createElement(NavButton, { icon: "ring", label: "Wedding", active: page === "wedding", onClick: () => setPage("wedding") }), /* @__PURE__ */ React.createElement(NavButton, { icon: "trending", label: "Invest", active: page === "investments", onClick: () => setPage("investments") })));
   }
   ReactDOM.createRoot(document.getElementById("root")).render(/* @__PURE__ */ React.createElement(App, null));
