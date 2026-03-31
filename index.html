@@ -61,6 +61,18 @@
   };
 
 
+  // Single sort function used EVERYWHERE for consistency.
+  // Date descending (newest day first), then push ID ascending within same day
+  // (matches Sheet row order since fullSyncSheetToFirebase creates IDs sequentially).
+  const sortTx = (list) => list.slice().sort((a, b) => {
+    if (a.date < b.date) return 1;
+    if (a.date > b.date) return -1;
+    if (a.id < b.id) return -1;
+    if (a.id > b.id) return 1;
+    return 0;
+  });
+
+
   const fmt = (n) => {
     const value = toNum(n);
     const a = Math.abs(value);
@@ -378,7 +390,7 @@
     // Compute all derived state from raw Firebase data and set all at once
     const applyData = useCallback((txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv) => {
       const gPrice = toNum(goldPrice);
-      const list = txRaw ? Object.entries(txRaw).map(([id, t]) => ({ ...t, id, amount: Number(t.amount) })).sort((a, b) => { const d = a.date < b.date ? 1 : a.date > b.date ? -1 : 0; if (d !== 0) return d; return (a._ts || 0) - (b._ts || 0) || a.id.localeCompare(b.id); }) : [];
+      const list = txRaw ? sortTx(Object.entries(txRaw).map(([id, t]) => ({ ...t, id, amount: Number(t.amount) }))) : [];
 
       // Account balances from transactions
       const weddingBal = list.filter(t => t.account === "Wedding").reduce((s, t) => s + t.amount, 0);
@@ -447,10 +459,9 @@
         if (data.error) { alert("Migration failed: " + data.error); return; }
 
         const writes = [];
-        // Transactions — add _ts with sequential values to preserve sheet order
-        const baseTs = Date.now() - (data.transactions || []).length * 10;
-        (data.transactions || []).forEach((t, i) => writes.push(
-          fb.post("transactions", { date: t.date, amount: Number(t.amount), account: t.account, notes: t.notes, _ts: baseTs + i * 10 })
+        // Transactions
+        (data.transactions || []).forEach((t) => writes.push(
+          fb.post("transactions", { date: t.date, amount: Number(t.amount), account: t.account, notes: t.notes })
         ));
         // Gold
         writes.push(fb.put("goldPrice", data.goldPrice || 0));
@@ -470,10 +481,10 @@
     };
 
     const addTransaction = async (form) => {
-      const txData = { date: form.date, amount: Number(form.amount), account: form.account, notes: form.notes, _ts: Date.now() };
-      // Optimistic — show instantly
+      const txData = { date: form.date, amount: Number(form.amount), account: form.account, notes: form.notes };
+      // Optimistic — show instantly, sorted into correct position
       const optimisticId = "_opt_" + Date.now();
-      setTransactions(prev => prev ? { ...prev, transactions: [{ ...txData, id: optimisticId }, ...prev.transactions], balance: prev.balance + txData.amount } : prev);
+      setTransactions(prev => prev ? { ...prev, transactions: sortTx([{ ...txData, id: optimisticId }, ...prev.transactions]), balance: prev.balance + txData.amount } : prev);
       setDashboard(prev => {
         if (!prev) return prev;
         const accts = { ...prev.accounts };
@@ -486,8 +497,8 @@
       // Write to Firebase (fast)
       const result = await fb.post("transactions", txData);
       if (!result?.name) { await load(); return { ok: false, message: "Firebase write failed." }; }
-      // Replace optimistic with real ID
-      setTransactions(prev => prev ? { ...prev, transactions: prev.transactions.map(t => t.id === optimisticId ? { ...t, id: result.name } : t) } : prev);
+      // Replace optimistic ID with real Firebase ID, re-sort into correct position
+      setTransactions(prev => prev ? { ...prev, transactions: sortTx(prev.transactions.map(t => t.id === optimisticId ? { ...t, id: result.name } : t)) } : prev);
       // Sync to Sheets in background (non-blocking)
       sheetsSync({ action: "addTransaction", ...form, firebaseId: result.name });
       return { ok: true };
