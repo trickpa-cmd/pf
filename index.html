@@ -44,9 +44,13 @@
       try { await fetch(`${FB}/${path}.json`, { method: "DELETE" }); return true; } catch(e) { return false; }
     }
   };
-  // Fire-and-forget Sheets sync — never blocks the UI
-  const sheetsSync = (data) => {
-    fetch(SHEETS_URL, { method: "POST", body: JSON.stringify(data), redirect: "follow", mode: "no-cors" }).catch(() => {});
+  // Sheets backup sync — same fetch pattern as the original working API
+  const sheetsSync = async (data) => {
+    try {
+      await fetch(SHEETS_URL, { method: "POST", body: JSON.stringify(data) });
+    } catch(e) {
+      console.warn("Sheets sync failed:", e);
+    }
   };
 
 
