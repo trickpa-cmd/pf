@@ -67,8 +67,8 @@
   const sortTx = (list) => list.slice().sort((a, b) => {
     if (a.date < b.date) return 1;
     if (a.date > b.date) return -1;
-    if (a.id < b.id) return -1;
-    if (a.id > b.id) return 1;
+    if (a.id > b.id) return -1;
+    if (a.id < b.id) return 1;
     return 0;
   });
 
