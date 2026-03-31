@@ -44,17 +44,15 @@
       try { await fetch(`${FB}/${path}.json`, { method: "DELETE" }); return true; } catch(e) { return false; }
     }
   };
-  // Sheets backup sync — fire-and-forget POST to Apps Script
-  // mode:"no-cors" is critical: Apps Script redirects (302) and browsers
-  // block cross-origin redirects unless we use opaque mode.
-  // Content-Type text/plain avoids CORS preflight OPTIONS request.
+  // Sheets backup sync — uses GET with payload in query string.
+  // POST doesn't work because Google's 302 redirect converts POST→GET
+  // before the script executes, so doPost never fires.
+  // GET survives the redirect and reaches doGet reliably.
   const sheetsSync = async (data) => {
     try {
-      await fetch(SHEETS_URL, {
-        method: "POST",
+      const payload = encodeURIComponent(JSON.stringify(data));
+      await fetch(`${SHEETS_URL}?action=sync&payload=${payload}`, {
         mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(data),
         redirect: "follow"
       });
     } catch(e) {
