@@ -44,10 +44,19 @@
       try { await fetch(`${FB}/${path}.json`, { method: "DELETE" }); return true; } catch(e) { return false; }
     }
   };
-  // Sheets backup sync — same fetch pattern as the original working API
+  // Sheets backup sync — fire-and-forget POST to Apps Script
+  // mode:"no-cors" is critical: Apps Script redirects (302) and browsers
+  // block cross-origin redirects unless we use opaque mode.
+  // Content-Type text/plain avoids CORS preflight OPTIONS request.
   const sheetsSync = async (data) => {
     try {
-      await fetch(SHEETS_URL, { method: "POST", body: JSON.stringify(data) });
+      await fetch(SHEETS_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(data),
+        redirect: "follow"
+      });
     } catch(e) {
       console.warn("Sheets sync failed:", e);
     }
