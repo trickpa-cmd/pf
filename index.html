@@ -46,7 +46,7 @@
   };
   // Fire-and-forget Sheets sync — never blocks the UI
   const sheetsSync = (data) => {
-    fetch(SHEETS_URL, { method: "POST", body: JSON.stringify(data) }).catch(() => {});
+    fetch(SHEETS_URL, { method: "POST", body: JSON.stringify(data), redirect: "follow", mode: "no-cors" }).catch(() => {});
   };
 
 
@@ -370,7 +370,8 @@
       const list = txRaw ? Object.entries(txRaw).map(([id, t]) => ({ ...t, id, amount: Number(t.amount) })).sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
 
       // Account balances from transactions
-      const homebal = list.filter(t => t.account === "Home").reduce((s, t) => s + t.amount, 0);
+      const weddingBal = list.filter(t => t.account === "Wedding").reduce((s, t) => s + t.amount, 0);
+      const homebal = list.filter(t => t.account === "Home").reduce((s, t) => s + t.amount, 0) + weddingBal; // wedding deducts from home
       const portbal = list.filter(t => t.account === "Portfolio").reduce((s, t) => s + t.amount, 0);
       const lifebal = list.filter(t => t.account === "Lifestyle").reduce((s, t) => s + t.amount, 0);
       const totalCash = homebal + portbal + lifebal;
@@ -467,6 +468,7 @@
         if (form.account === "Home") accts.home = toNum(accts.home) + txData.amount;
         if (form.account === "Portfolio") accts.portfolio = toNum(accts.portfolio) + txData.amount;
         if (form.account === "Lifestyle") accts.lifestyle = toNum(accts.lifestyle) + txData.amount;
+        if (form.account === "Wedding") accts.home = toNum(accts.home) + txData.amount; // wedding deducts from home
         return { ...prev, accounts: accts };
       });
       // Write to Firebase (fast)
@@ -488,6 +490,7 @@
         if (transaction.account === "Home") accts.home = toNum(accts.home) - transaction.amount;
         if (transaction.account === "Portfolio") accts.portfolio = toNum(accts.portfolio) - transaction.amount;
         if (transaction.account === "Lifestyle") accts.lifestyle = toNum(accts.lifestyle) - transaction.amount;
+        if (transaction.account === "Wedding") accts.home = toNum(accts.home) - transaction.amount; // wedding deducts from home
         return { ...prev, accounts: accts };
       });
       // Delete from Firebase
