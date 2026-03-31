@@ -378,7 +378,7 @@
     // Compute all derived state from raw Firebase data and set all at once
     const applyData = useCallback((txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv) => {
       const gPrice = toNum(goldPrice);
-      const list = txRaw ? Object.entries(txRaw).map(([id, t]) => ({ ...t, id, amount: Number(t.amount) })).sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
+      const list = txRaw ? Object.entries(txRaw).map(([id, t]) => ({ ...t, id, amount: Number(t.amount) })).sort((a, b) => { const d = new Date(b.date) - new Date(a.date); return d !== 0 ? d : a.id.localeCompare(b.id); }) : [];
 
       // Account balances from transactions
       const weddingBal = list.filter(t => t.account === "Wedding").reduce((s, t) => s + t.amount, 0);
