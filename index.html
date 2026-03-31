@@ -378,7 +378,7 @@
     // Compute all derived state from raw Firebase data and set all at once
     const applyData = useCallback((txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv) => {
       const gPrice = toNum(goldPrice);
-      const list = txRaw ? Object.entries(txRaw).map(([id, t]) => ({ ...t, id, amount: Number(t.amount) })).sort((a, b) => { const d = new Date(b.date) - new Date(a.date); return d !== 0 ? d : a.id.localeCompare(b.id); }) : [];
+      const list = txRaw ? Object.entries(txRaw).map(([id, t]) => ({ ...t, id, amount: Number(t.amount) })).sort((a, b) => { const d = a.date < b.date ? 1 : a.date > b.date ? -1 : 0; if (d !== 0) return d; return (a._ts || 0) - (b._ts || 0) || a.id.localeCompare(b.id); }) : [];
 
       // Account balances from transactions
       const weddingBal = list.filter(t => t.account === "Wedding").reduce((s, t) => s + t.amount, 0);
@@ -447,9 +447,10 @@
         if (data.error) { alert("Migration failed: " + data.error); return; }
 
         const writes = [];
-        // Transactions
-        (data.transactions || []).forEach(t => writes.push(
-          fb.post("transactions", { date: t.date, amount: Number(t.amount), account: t.account, notes: t.notes })
+        // Transactions — add _ts with sequential values to preserve sheet order
+        const baseTs = Date.now() - (data.transactions || []).length * 10;
+        (data.transactions || []).forEach((t, i) => writes.push(
+          fb.post("transactions", { date: t.date, amount: Number(t.amount), account: t.account, notes: t.notes, _ts: baseTs + i * 10 })
         ));
         // Gold
         writes.push(fb.put("goldPrice", data.goldPrice || 0));
@@ -469,7 +470,7 @@
     };
 
     const addTransaction = async (form) => {
-      const txData = { date: form.date, amount: Number(form.amount), account: form.account, notes: form.notes };
+      const txData = { date: form.date, amount: Number(form.amount), account: form.account, notes: form.notes, _ts: Date.now() };
       // Optimistic — show instantly
       const optimisticId = "_opt_" + Date.now();
       setTransactions(prev => prev ? { ...prev, transactions: [{ ...txData, id: optimisticId }, ...prev.transactions], balance: prev.balance + txData.amount } : prev);
