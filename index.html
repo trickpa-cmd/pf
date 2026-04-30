@@ -27,23 +27,87 @@
 
   // Firebase — primary fast database
   const FB = "https://personal-finance-14429-default-rtdb.asia-southeast1.firebasedatabase.app";
+  const FB_API_KEY = "AIzaSyCMglegtfReOW9sirBwP-YQ_v9ONKMjNus";
   // Sheets Apps Script — background backup only
   const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxtRIEhkYHpW9iNkOydrLOq96yfbN-GciPzIq6FUkSfsjZjqjP11gb1QC8Tp02zNgYTyQ/exec";
 
+  // Anonymous Firebase auth via REST API — no SDK needed.
+  // Signs in anonymously and caches the token; auto-refreshes before expiry.
+  let _idToken = null;
+  let _refreshToken = (() => { try { return localStorage.getItem("fb_refresh_token"); } catch(e) { return null; } })();
+  let _tokenExpiry = 0;
+
+  const _saveRefreshToken = (t) => {
+    _refreshToken = t;
+    try { localStorage.setItem("fb_refresh_token", t); } catch(e) {}
+  };
+
+  const getAuthToken = async () => {
+    const now = Date.now();
+    if (_idToken && now < _tokenExpiry - 60000) return _idToken;
+
+    if (_refreshToken) {
+      try {
+        const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FB_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(_refreshToken)}`
+        });
+        const d = await r.json();
+        if (d.id_token) {
+          _idToken = d.id_token;
+          _saveRefreshToken(d.refresh_token);
+          _tokenExpiry = now + parseInt(d.expires_in) * 1000;
+          return _idToken;
+        }
+      } catch(e) {}
+    }
+
+    // Fresh anonymous sign-in
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FB_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ returnSecureToken: true })
+    });
+    const d = await r.json();
+    if (!d.idToken) throw new Error("Firebase auth failed: " + JSON.stringify(d));
+    _idToken = d.idToken;
+    _saveRefreshToken(d.refreshToken);
+    _tokenExpiry = now + parseInt(d.expiresIn) * 1000;
+    return _idToken;
+  };
+
   const fb = {
     async get(path) {
-      try { const r = await fetch(`${FB}/${path}.json`); return r.ok ? r.json() : null; } catch(e) { return null; }
+      try {
+        const token = await getAuthToken();
+        const r = await fetch(`${FB}/${path}.json?auth=${token}`);
+        return r.ok ? r.json() : null;
+      } catch(e) { return null; }
     },
     async post(path, data) {
-      try { const r = await fetch(`${FB}/${path}.json`, { method: "POST", body: JSON.stringify(data) }); return r.json(); } catch(e) { return null; }
+      try {
+        const token = await getAuthToken();
+        const r = await fetch(`${FB}/${path}.json?auth=${token}`, { method: "POST", body: JSON.stringify(data) });
+        return r.json();
+      } catch(e) { return null; }
     },
     async put(path, data) {
-      try { const r = await fetch(`${FB}/${path}.json`, { method: "PUT", body: JSON.stringify(data) }); return r.json(); } catch(e) { return null; }
+      try {
+        const token = await getAuthToken();
+        const r = await fetch(`${FB}/${path}.json?auth=${token}`, { method: "PUT", body: JSON.stringify(data) });
+        return r.json();
+      } catch(e) { return null; }
     },
     async remove(path) {
-      try { await fetch(`${FB}/${path}.json`, { method: "DELETE" }); return true; } catch(e) { return false; }
+      try {
+        const token = await getAuthToken();
+        await fetch(`${FB}/${path}.json?auth=${token}`, { method: "DELETE" });
+        return true;
+      } catch(e) { return false; }
     }
   };
+
   // Sheets backup sync — uses GET with payload in query string.
   // POST doesn't work because Google's 302 redirect converts POST→GET
   // before the script executes, so doPost never fires.
@@ -166,7 +230,7 @@
       if (!amountsMatch) { setFormError("Transfer amounts must be equal."); return; }
       if (!canSave) return;
       setSaving(true);
-      const prefix = isTransfer ? "\u21C6 " : "";
+      const prefix = isTransfer ? "⇆ " : "";
       const notesVal = prefix + notes.trim();
       if (hasIncome) {
         const r = await onAdd({ date, amount: String(Math.abs(Number(incomeAmt))), account: incomeAcc, notes: notesVal });
@@ -235,7 +299,7 @@
               })
             ),
             React.createElement("div", { style: { background: "#FFF5F5", border: `2px solid ${C.red}`, borderRadius: 12, padding: 12 } },
-              React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 8, letterSpacing: 0.5 } }, "\u2212 EXPENSE"),
+              React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 8, letterSpacing: 0.5 } }, "− EXPENSE"),
               React.createElement("div", { style: { marginBottom: 8 } },
                 React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Account"),
                 React.createElement("select", { value: expenseAcc, onChange: (e) => setExpenseAcc(e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, background: "#fff", color: C.text, outline: "none" } },
@@ -251,7 +315,7 @@
             )
           ),
           isTransfer && React.createElement("div", { style: { background: "#F0FFF4", border: `1px solid ${C.accent}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, color: C.accent, fontWeight: 600, textAlign: "center" } },
-            amountsMatch ? "\u2194 Transfer \u2014 amounts match \u2713" : "\u26A0 Amounts must be equal to transfer"
+            amountsMatch ? "↔ Transfer — amounts match ✓" : "⚠ Amounts must be equal to transfer"
           ),
           formError ? React.createElement("div", { style: { color: C.red, fontSize: 12, fontWeight: 600, textAlign: "center" } }, formError) : null,
           React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
@@ -273,11 +337,11 @@
               return React.createElement("div", { key: `${t.date||""}-${t.account||""}-${t.notes||""}-${t.amount||0}-${i}`,
                 style: { display: "flex", alignItems: "center", padding: "13px 16px", borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : "none", gap: 10, background: rowBg, borderRadius: i === 0 ? "16px 16px 0 0" : i === filtered.length - 1 ? "0 0 16px 16px" : 0 } },
                 React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
-                  React.createElement("span", { style: { fontSize: 14 } }, t.account === "Wedding" ? "\uD83D\uDC8D" : t.account === "Home" ? "\uD83C\uDFE0" : t.account === "Portfolio" ? "\uD83D\uDCC8" : t.account === "Lifestyle" ? "\u2728" : "\uD83D\uDCB0")
+                  React.createElement("span", { style: { fontSize: 14 } }, t.account === "Wedding" ? "💍" : t.account === "Home" ? "🏠" : t.account === "Portfolio" ? "📈" : t.account === "Lifestyle" ? "✨" : "💰")
                 ),
                 React.createElement("div", { style: { flex: 1, minWidth: 0 } },
                   React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.notes),
-                  React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, t.account, " \u2022 ", t.date)
+                  React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, t.account, " • ", t.date)
                 ),
                 React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: amt < 0 ? C.red : C.accent, flexShrink: 0 } },
                   toNum(t.amount) < 0 ? `-$${Math.abs(toNum(t.amount)).toLocaleString()}` : `+$${toNum(t.amount).toLocaleString()}`
@@ -295,7 +359,7 @@
             })
       ),
       React.createElement(ConfirmDialog, { open: !!deleteTarget, title: "Delete transaction?",
-        message: deleteTarget ? `Permanently delete:\n${deleteTarget.notes}\n${deleteTarget.account} \u2022 ${deleteTarget.date} \u2022 ${fmt(deleteTarget.amount)}` : "",
+        message: deleteTarget ? `Permanently delete:\n${deleteTarget.notes}\n${deleteTarget.account} • ${deleteTarget.date} • ${fmt(deleteTarget.amount)}` : "",
         confirmLabel: "Delete", onConfirm: handleDelete, onCancel: () => !deleting && setDeleteTarget(null), busy: deleting })
     );
   }
@@ -334,7 +398,7 @@
       const barW = maxVal > 0 ? p.portfolioValue / maxVal * 100 : 0;
       const savedW = maxVal > 0 ? p.ifSaved / maxVal * 100 : 0;
       return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 50, fontSize: 11, color: C.sub, fontWeight: 600, flexShrink: 0 } }, p.year.replace("Year ", "Yr ")), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, position: "relative", height: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 0, left: 0, width: `${barW}%`, height: "100%", background: `linear-gradient(90deg,${C.accentLight},${C.accent}40)`, borderRadius: 4 } }), /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 6, left: 0, width: `${savedW}%`, height: 6, background: `${C.muted}30`, borderRadius: 3 } })), /* @__PURE__ */ React.createElement("div", { style: { width: 70, fontSize: 11, fontWeight: 700, fontFamily: MONO, color: C.accent, textAlign: "right", flexShrink: 0 } }, fmt(p.portfolioValue)));
-    }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 12, fontSize: 11, color: C.muted } }, /* @__PURE__ */ React.createElement("span", null, "\u25A0 With returns"), /* @__PURE__ */ React.createElement("span", { style: { opacity: 0.5 } }, "\u25A0 If just saved"))));
+    }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 12, fontSize: 11, color: C.muted } }, /* @__PURE__ */ React.createElement("span", null, "■ With returns"), /* @__PURE__ */ React.createElement("span", { style: { opacity: 0.5 } }, "■ If just saved"))));
   }
 
   function LockScreen({ onUnlock }) {
@@ -356,10 +420,10 @@
     }, autoFocus: true, placeholder: "Password", style: { width: "100%", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text } }), error ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.red, marginTop: -4 } }, error) : null, /* @__PURE__ */ React.createElement("button", { type: "submit", style: { background: C.accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: FONT } }, "Unlock"))));
   }
 
-  function MigrationScreen({ onMigrate, migrating }) {
+  function MigrationScreen({ onMigrate, migrating, migrateStatus }) {
     return React.createElement("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.bg } },
       React.createElement(Card, { style: { width: "100%", maxWidth: 380, padding: 28, textAlign: "center" } },
-        React.createElement("div", { style: { fontSize: 40, marginBottom: 16 } }, "\uD83D\uDCCA"),
+        React.createElement("div", { style: { fontSize: 40, marginBottom: 16 } }, "📊"),
         React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8 } }, "First-time Setup"),
         React.createElement("div", { style: { fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 24 } },
           "Firebase is empty. Import your existing data from Google Sheets to get started. This only needs to be done once."
@@ -368,7 +432,10 @@
           style: { width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 700, fontSize: 15, cursor: migrating ? "default" : "pointer", fontFamily: FONT, opacity: migrating ? 0.7 : 1 } },
           migrating ? "Importing from Sheets..." : "Import from Google Sheets"
         ),
-        migrating && React.createElement("div", { style: { marginTop: 14, fontSize: 12, color: C.muted } }, "This may take 10\u201320 seconds\u2026")
+        migrating && React.createElement("div", { style: { marginTop: 14, fontSize: 12, color: C.muted } }, "This may take 10–20 seconds…"),
+        migrateStatus && migrateStatus.map((line, i) =>
+          React.createElement("div", { key: i, style: { marginTop: i === 0 ? 16 : 4, fontSize: 11, fontFamily: MONO, color: line.startsWith("✗") ? C.red : line.startsWith("✓") ? C.accent : C.sub, textAlign: "left", wordBreak: "break-all" } }, line)
+        )
       )
     );
   }
@@ -381,6 +448,7 @@
     const [loading, setLoading] = useState(false);
     const [migrating, setMigrating] = useState(false);
     const [isEmpty, setIsEmpty] = useState(false);
+    const [migrateStatus, setMigrateStatus] = useState(null);
     const [dashboard, setDashboard] = useState(null);
     const [transactions, setTransactions] = useState(null);
     const [assets, setAssets] = useState(null);
@@ -453,28 +521,60 @@
     // One-time migration from Sheets → Firebase
     const migrateFromSheets = async () => {
       setMigrating(true);
+      const log = [];
+      const addLog = (line) => { log.push(line); setMigrateStatus([...log]); };
       try {
-        const r = await fetch(`${SHEETS_URL}?action=getAllData`);
-        const data = await r.json();
-        if (data.error) { alert("Migration failed: " + data.error); return; }
+        // Step 1: test Firebase auth
+        addLog("⋯ Testing Firebase auth…");
+        let token;
+        try {
+          token = await getAuthToken();
+          addLog("✓ Firebase auth OK");
+        } catch(e) {
+          addLog("✗ Firebase auth FAILED: " + e.message);
+          return;
+        }
 
+        // Step 2: fetch from Sheets
+        addLog("⋯ Fetching data from Google Sheets…");
+        let data;
+        try {
+          const r = await fetch(`${SHEETS_URL}?action=getAllData`);
+          data = await r.json();
+          if (data.error) { addLog("✗ Sheets error: " + data.error); return; }
+          addLog(`✓ Sheets OK — ${(data.transactions||[]).length} transactions`);
+        } catch(e) {
+          addLog("✗ Sheets fetch FAILED: " + e.message);
+          return;
+        }
+
+        // Step 3: test one Firebase write
+        addLog("⋯ Testing Firebase write…");
+        const testWrite = await fetch(`${FB}/goldPrice.json?auth=${token}`, { method: "PUT", body: JSON.stringify(data.goldPrice || 0) });
+        if (!testWrite.ok) {
+          const err = await testWrite.text();
+          addLog("✗ Firebase write FAILED (" + testWrite.status + "): " + err);
+          return;
+        }
+        addLog("✓ Firebase write OK");
+
+        // Step 4: write everything
+        addLog("⋯ Writing all data to Firebase…");
         const writes = [];
-        // Transactions
         (data.transactions || []).forEach((t) => writes.push(
           fb.post("transactions", { date: t.date, amount: Number(t.amount), account: t.account, notes: t.notes })
         ));
-        // Gold
-        writes.push(fb.put("goldPrice", data.goldPrice || 0));
         writes.push(fb.put("weddingBudget", data.weddingBudget || 0));
         (data.goldEntries || []).forEach(e => writes.push(fb.post("goldEntries", { date: e.date, description: e.description, weight: e.weight, unit: e.unit })));
         (data.properties || []).forEach(p => writes.push(fb.post("properties", { name: p.name, type: p.type, value: p.value })));
         if (data.investments) writes.push(fb.put("investments", data.investments));
-
         await Promise.all(writes);
+        addLog("✓ All data written");
+
         setIsEmpty(false);
         await load();
       } catch(e) {
-        alert("Migration error: " + e.message);
+        addLog("✗ Unexpected error: " + e.message);
       } finally {
         setMigrating(false);
       }
@@ -531,7 +631,7 @@
     };
 
     if (!isUnlocked) return React.createElement(LockScreen, { onUnlock: () => setIsUnlocked(true) });
-    if (isEmpty) return React.createElement(MigrationScreen, { onMigrate: migrateFromSheets, migrating });
+    if (isEmpty) return React.createElement(MigrationScreen, { onMigrate: migrateFromSheets, migrating, migrateStatus });
 
     return React.createElement("div", { style: { fontFamily: FONT, background: C.bg, minHeight: "100vh", color: C.text, maxWidth: 480, margin: "0 auto", position: "relative" } },
       React.createElement("div", { style: { padding: "16px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" } },
