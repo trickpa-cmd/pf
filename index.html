@@ -63,11 +63,11 @@
       } catch(e) {}
     }
 
-    // Fresh anonymous sign-in
-    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FB_API_KEY}`, {
+    // Sign in with dedicated app account
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FB_API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ returnSecureToken: true })
+      body: JSON.stringify({ email: "ziadehpatrick@gmail.com", password: "plko!!!1", returnSecureToken: true })
     });
     const d = await r.json();
     if (!d.idToken) throw new Error("Firebase auth failed: " + JSON.stringify(d));
