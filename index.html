@@ -34,12 +34,12 @@
   // Anonymous Firebase auth via REST API — no SDK needed.
   // Signs in anonymously and caches the token; auto-refreshes before expiry.
   let _idToken = null;
-  let _refreshToken = (() => { try { return localStorage.getItem("fb_refresh_token"); } catch(e) { return null; } })();
+  let _refreshToken = (() => { try { return localStorage.getItem("fb_refresh_token_v2"); } catch(e) { return null; } })();
   let _tokenExpiry = 0;
 
   const _saveRefreshToken = (t) => {
     _refreshToken = t;
-    try { localStorage.setItem("fb_refresh_token", t); } catch(e) {}
+    try { localStorage.setItem("fb_refresh_token_v2", t); } catch(e) {}
   };
 
   const getAuthToken = async () => {
