@@ -209,7 +209,9 @@
     const accts = dashData?.accounts;
     const filters = ["All", "Home", "Portfolio", "Lifestyle", "Wedding"];
     const transactionsList = Array.isArray(data.transactions) ? data.transactions : [];
-    const filtered = filter === "All" ? transactionsList : transactionsList.filter((t) => t.account === filter);
+    let _runBal = data.balance;
+    const txsWithBalance = transactionsList.map(t => { const b = _runBal; _runBal -= t.amount; return { ...t, runningBalance: b }; });
+    const filtered = filter === "All" ? txsWithBalance : txsWithBalance.filter((t) => t.account === filter);
 
     const hasIncome = incomeAmt !== "" && Number(incomeAmt) > 0;
     const hasExpense = expenseAmt !== "" && Number(expenseAmt) > 0;
