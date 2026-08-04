@@ -10,7 +10,7 @@
 <title>Personal Finance</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;background:#F7F6F3;-webkit-tap-highlight-color:transparent}</style>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;background:#F7F6F3;-webkit-tap-highlight-color:transparent}input,select,button{font-family:inherit}</style>
 </head>
 <body>
 <div id="root"></div>
@@ -18,7 +18,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script>
 (() => {
-  const { useState, useEffect, useCallback } = React;
+  const { useState, useEffect, useCallback, useMemo } = React;
+  const h = React.createElement;
+
   const toNum = (v) => {
     if (typeof v === "number") return Number.isFinite(v) ? v : 0;
     if (typeof v === "string") { const cleaned = v.replace(/[$,\s]/g, ""); const n2 = Number(cleaned); return Number.isFinite(n2) ? n2 : 0; }
@@ -31,8 +33,8 @@
   // Sheets Apps Script — background backup only
   const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxtRIEhkYHpW9iNkOydrLOq96yfbN-GciPzIq6FUkSfsjZjqjP11gb1QC8Tp02zNgYTyQ/exec";
 
-  // Anonymous Firebase auth via REST API — no SDK needed.
-  // Signs in anonymously and caches the token; auto-refreshes before expiry.
+  // Firebase auth via REST API — no SDK needed.
+  // Signs in with the dedicated app account and caches the token; auto-refreshes before expiry.
   let _idToken = null;
   let _refreshToken = (() => { try { return localStorage.getItem("fb_refresh_token_v2"); } catch(e) { return null; } })();
   let _tokenExpiry = 0;
@@ -124,7 +126,6 @@
     }
   };
 
-
   // Single sort function used EVERYWHERE for consistency.
   // Date descending (newest day first), then push ID ascending within same day
   // (matches Sheet row order since fullSyncSheetToFirebase creates IDs sequentially).
@@ -136,17 +137,51 @@
     return 0;
   });
 
-
   const fmt = (n) => {
     const value = toNum(n);
     const a = Math.abs(value);
-    const s = a >= 1e3 ? a.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : a.toString();
+    const s = a >= 1e3 ? a.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : Math.round(a * 100) / 100 + "";
     return value < 0 ? `-$${s}` : `$${s}`;
   };
   const pct = (n) => `${(n * 100).toFixed(1)}%`;
+  const monthLabel = (ym) => {
+    const [y, m] = ym.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
+  const monthShort = (ym) => {
+    const [y, m] = ym.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short" });
+  };
+  const shiftMonth = (ym, delta) => {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+  const thisMonth = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+
   const FONT = "'DM Sans',sans-serif";
   const MONO = "'JetBrains Mono',monospace";
-  const C = { bg: "#F7F6F3", card: "#FFFFFF", border: "#E8E6E1", text: "#1A1A1A", sub: "#6B6B6B", muted: "#9B9B9B", accent: "#2D5A27", accentLight: "#E8F0E7", red: "#C53030", redLight: "#FFF0F0", blue: "#2B6CB0", blueLight: "#EBF4FF", amber: "#B7791F", amberLight: "#FFFAF0", gold: "#A67C00", goldLight: "#FFF8E1" };
+  const C = {
+    bg: "#F7F6F3", card: "#FFFFFF", border: "#E8E6E1",
+    text: "#1A1A1A", sub: "#6B6B6B", muted: "#9B9B9B",
+    accent: "#2D5A27", accentLight: "#E8F0E7",
+    red: "#C53030", redLight: "#FFF0F0",
+    blue: "#2B6CB0", blueLight: "#EBF4FF",
+    amber: "#B7791F", amberLight: "#FFFAF0",
+    gold: "#A67C00", goldLight: "#FFF8E1",
+    purple: "#7C3AED", purpleLight: "#F3EEFF",
+    shadow: "0 1px 3px rgba(0,0,0,0.05)"
+  };
+  const ACCT_META = {
+    Home:      { emoji: "🏠", color: C.accent, light: C.accentLight },
+    Portfolio: { emoji: "📈", color: C.blue,   light: C.blueLight },
+    Lifestyle: { emoji: "✨", color: C.amber,  light: C.amberLight },
+    Wedding:   { emoji: "💍", color: C.purple, light: C.purpleLight }
+  };
+
   function Icon({ name, size = 18, color = C.sub }) {
     const d = {
       home: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
@@ -154,41 +189,68 @@
       wallet: "M21 12V7H5a2 2 0 01-2-2m0 0a2 2 0 012-2h14v4M3 5v14a2 2 0 002 2h16v-5",
       plus: "M12 5v14M5 12h14",
       refresh: "M20.49 15a9 9 0 11-2.12-9.36L23 10",
-      car: "M5 17h2m10 0h2M3 11l1.5-5h15l1.5 5",
-      trending: ""
+      car: "M5 17h2m10 0h2M3 11l1.5-5h15l1.5 5"
     };
-    if (name === "ring") return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "14", r: "7" }), /* @__PURE__ */ React.createElement("path", { d: "M8 6L12 2l4 4" }));
-    if (name === "trending") return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, /* @__PURE__ */ React.createElement("polyline", { points: "23 6 13.5 15.5 8.5 10.5 1 18" }), /* @__PURE__ */ React.createElement("polyline", { points: "17 6 23 6 23 12" }));
-    if (name === "gold") return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, /* @__PURE__ */ React.createElement("polygon", { points: "12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" }));
-    if (name === "building") return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, /* @__PURE__ */ React.createElement("rect", { x: "4", y: "2", width: "16", height: "20", rx: "1" }), /* @__PURE__ */ React.createElement("line", { x1: "9", y1: "6", x2: "9", y2: "6.01" }), /* @__PURE__ */ React.createElement("line", { x1: "15", y1: "6", x2: "15", y2: "6.01" }), /* @__PURE__ */ React.createElement("line", { x1: "9", y1: "10", x2: "9", y2: "10.01" }), /* @__PURE__ */ React.createElement("line", { x1: "15", y1: "10", x2: "15", y2: "10.01" }), /* @__PURE__ */ React.createElement("line", { x1: "9", y1: "14", x2: "9", y2: "14.01" }), /* @__PURE__ */ React.createElement("line", { x1: "15", y1: "14", x2: "15", y2: "14.01" }), /* @__PURE__ */ React.createElement("path", { d: "M10 22v-4h4v4" }));
-    if (name === "layers") return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, /* @__PURE__ */ React.createElement("polygon", { points: "12 2 2 7 12 12 22 7 12 2" }), /* @__PURE__ */ React.createElement("polyline", { points: "2 17 12 22 22 17" }), /* @__PURE__ */ React.createElement("polyline", { points: "2 12 12 17 22 12" }));
-    if (name === "chart") return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, /* @__PURE__ */ React.createElement("path", { d: d.chart }), /* @__PURE__ */ React.createElement("rect", { x: "3", y: "3", width: "18", height: "18", rx: "2" }));
-    if (name === "refresh") return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, /* @__PURE__ */ React.createElement("polyline", { points: "23 4 23 10 17 10" }), /* @__PURE__ */ React.createElement("path", { d: d.refresh }));
-    if (name === "car") return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, /* @__PURE__ */ React.createElement("path", { d: d.car }), /* @__PURE__ */ React.createElement("rect", { x: "2", y: "11", width: "20", height: "6", rx: "1" }), /* @__PURE__ */ React.createElement("circle", { cx: "7", cy: "17", r: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "17", cy: "17", r: "2" }));
-    return /* @__PURE__ */ React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: name === "plus" ? "2" : "1.8" }, /* @__PURE__ */ React.createElement("path", { d: d[name] || d.home }));
+    if (name === "ring") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("circle", { cx: "12", cy: "14", r: "7" }), h("path", { d: "M8 6L12 2l4 4" }));
+    if (name === "trending") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("polyline", { points: "23 6 13.5 15.5 8.5 10.5 1 18" }), h("polyline", { points: "17 6 23 6 23 12" }));
+    if (name === "gold") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("polygon", { points: "12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" }));
+    if (name === "building") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("rect", { x: "4", y: "2", width: "16", height: "20", rx: "1" }), h("line", { x1: "9", y1: "6", x2: "9", y2: "6.01" }), h("line", { x1: "15", y1: "6", x2: "15", y2: "6.01" }), h("line", { x1: "9", y1: "10", x2: "9", y2: "10.01" }), h("line", { x1: "15", y1: "10", x2: "15", y2: "10.01" }), h("line", { x1: "9", y1: "14", x2: "9", y2: "14.01" }), h("line", { x1: "15", y1: "14", x2: "15", y2: "14.01" }), h("path", { d: "M10 22v-4h4v4" }));
+    if (name === "layers") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("polygon", { points: "12 2 2 7 12 12 22 7 12 2" }), h("polyline", { points: "2 17 12 22 22 17" }), h("polyline", { points: "2 12 12 17 22 12" }));
+    if (name === "chart") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("path", { d: d.chart }), h("rect", { x: "3", y: "3", width: "18", height: "18", rx: "2" }));
+    if (name === "refresh") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("polyline", { points: "23 4 23 10 17 10" }), h("path", { d: d.refresh }));
+    if (name === "car") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("path", { d: d.car }), h("rect", { x: "2", y: "11", width: "20", height: "6", rx: "1" }), h("circle", { cx: "7", cy: "17", r: "2" }), h("circle", { cx: "17", cy: "17", r: "2" }));
+    if (name === "search") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "2", strokeLinecap: "round" }, h("circle", { cx: "11", cy: "11", r: "7" }), h("line", { x1: "21", y1: "21", x2: "16.5", y2: "16.5" }));
+    if (name === "chevL") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round" }, h("polyline", { points: "15 18 9 12 15 6" }));
+    if (name === "chevR") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round" }, h("polyline", { points: "9 18 15 12 9 6" }));
+    return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: name === "plus" ? "2.2" : "1.8", strokeLinecap: "round", strokeLinejoin: "round" }, h("path", { d: d[name] || d.home }));
   }
+
   function NavButton({ icon, label, active, onClick }) {
-    return /* @__PURE__ */ React.createElement("button", { onClick, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: active ? C.accentLight : "transparent", border: "none", borderRadius: 12, padding: "8px 20px", cursor: "pointer", minWidth: 68 } }, /* @__PURE__ */ React.createElement(Icon, { name: icon, size: 20, color: active ? C.accent : C.muted }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: active ? 600 : 400, color: active ? C.accent : C.muted, fontFamily: FONT } }, label));
+    return h("button", { onClick, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: active ? C.accentLight : "transparent", border: "none", borderRadius: 12, padding: "7px 12px", cursor: "pointer", minWidth: 56, transition: "background 0.15s" } },
+      h(Icon, { name: icon, size: 20, color: active ? C.accent : C.muted }),
+      h("span", { style: { fontSize: 10, fontWeight: active ? 700 : 500, color: active ? C.accent : C.muted, fontFamily: FONT } }, label)
+    );
   }
   function Card({ children, style }) {
-    return /* @__PURE__ */ React.createElement("div", { style: { background: C.card, borderRadius: 16, padding: 20, border: `1px solid ${C.border}`, ...style } }, children);
+    return h("div", { style: { background: C.card, borderRadius: 16, padding: 20, border: `1px solid ${C.border}`, boxShadow: C.shadow, ...style } }, children);
   }
   function StatCard({ label, value, icon, color = C.accent, bg = C.accentLight }) {
-    return /* @__PURE__ */ React.createElement(Card, { style: { display: "flex", alignItems: "flex-start", gap: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 12, background: bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ React.createElement(Icon, { name: icon, size: 18, color })), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.sub, fontWeight: 500, marginBottom: 4 } }, label), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 700, color: C.text, fontFamily: MONO } }, value)));
+    return h(Card, { style: { display: "flex", alignItems: "flex-start", gap: 14 } },
+      h("div", { style: { width: 40, height: 40, borderRadius: 12, background: bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, h(Icon, { name: icon, size: 18, color })),
+      h("div", { style: { flex: 1 } },
+        h("div", { style: { fontSize: 12, color: C.sub, fontWeight: 500, marginBottom: 4 } }, label),
+        h("div", { style: { fontSize: 20, fontWeight: 700, color: C.text, fontFamily: MONO } }, value)
+      )
+    );
   }
-  function InputField({ label, type = "text", value, onChange, placeholder, inputMode, step, pattern }) {
-    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, label), /* @__PURE__ */ React.createElement("input", { type, value, onChange: (e) => onChange(e.target.value), placeholder, inputMode, step, pattern, style: { width: "100%", padding: "10px 12px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14, fontFamily: FONT, background: C.bg, outline: "none", boxSizing: "border-box", color: C.text } }));
-  }
-  function SelectField({ label, value, options, onChange }) {
-    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, label), /* @__PURE__ */ React.createElement("select", { value, onChange: (e) => onChange(e.target.value), style: { width: "100%", padding: "10px 12px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14, fontFamily: FONT, background: C.bg, outline: "none", boxSizing: "border-box", color: C.text, cursor: "pointer" } }, options.map((o) => /* @__PURE__ */ React.createElement("option", { key: o, value: o }, o))));
+  function InputField({ label, type = "text", value, onChange, placeholder, inputMode }) {
+    return h("div", null,
+      h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, label),
+      h("input", { type, value, onChange: (e) => onChange(e.target.value), placeholder, inputMode, style: { width: "100%", padding: "10px 12px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14, fontFamily: FONT, background: C.bg, outline: "none", boxSizing: "border-box", color: C.text } })
+    );
   }
   function PageLoader() {
-    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60, gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 32, height: 32, border: `3px solid ${C.border}`, borderTop: `3px solid ${C.accent}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: C.muted } }, "Loading..."), /* @__PURE__ */ React.createElement("style", null, `@keyframes spin{to{transform:rotate(360deg)}}`));
+    return h("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60, gap: 12 } },
+      h("div", { style: { width: 32, height: 32, border: `3px solid ${C.border}`, borderTop: `3px solid ${C.accent}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }),
+      h("span", { style: { fontSize: 13, color: C.muted } }, "Loading..."),
+      h("style", null, `@keyframes spin{to{transform:rotate(360deg)}}`)
+    );
   }
   function ConfirmDialog({ open, title, message, confirmLabel = "Delete", cancelLabel = "Cancel", confirmColor = C.red, onConfirm, onCancel, busy = false }) {
     if (!open) return null;
-    return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.32)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 300 } }, /* @__PURE__ */ React.createElement("div", { style: { width: "100%", maxWidth: 360, background: C.card, borderRadius: 18, border: `1px solid ${C.border}`, padding: 20, boxShadow: "0 12px 40px rgba(0,0,0,0.12)" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 17, fontWeight: 800, color: C.text, marginBottom: 8 } }, title), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: C.sub, lineHeight: 1.5, marginBottom: 18, whiteSpace: "pre-wrap" } }, message), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("button", { onClick: onCancel, disabled: busy, style: { background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: busy ? "default" : "pointer", fontFamily: FONT, opacity: busy ? 0.6 : 1 } }, cancelLabel), /* @__PURE__ */ React.createElement("button", { onClick: onConfirm, disabled: busy, style: { background: confirmColor, color: "#fff", border: "none", borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: busy ? "default" : "pointer", fontFamily: FONT, opacity: busy ? 0.7 : 1 } }, busy ? "Deleting..." : confirmLabel))));
+    return h("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.32)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 300 } },
+      h("div", { style: { width: "100%", maxWidth: 360, background: C.card, borderRadius: 18, border: `1px solid ${C.border}`, padding: 20, boxShadow: "0 12px 40px rgba(0,0,0,0.12)" } },
+        h("div", { style: { fontSize: 17, fontWeight: 800, color: C.text, marginBottom: 8 } }, title),
+        h("div", { style: { fontSize: 13, color: C.sub, lineHeight: 1.5, marginBottom: 18, whiteSpace: "pre-wrap" } }, message),
+        h("div", { style: { display: "flex", gap: 10, justifyContent: "flex-end" } },
+          h("button", { onClick: onCancel, disabled: busy, style: { background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: busy ? "default" : "pointer", fontFamily: FONT, opacity: busy ? 0.6 : 1 } }, cancelLabel),
+          h("button", { onClick: onConfirm, disabled: busy, style: { background: confirmColor, color: "#fff", border: "none", borderRadius: 10, padding: "10px 14px", fontWeight: 700, fontSize: 13, cursor: busy ? "default" : "pointer", fontFamily: FONT, opacity: busy ? 0.7 : 1 } }, busy ? "Deleting..." : confirmLabel)
+        )
+      )
+    );
   }
+
+  // ————— Transactions —————
   function TransactionsPage({ data, dashData, onAdd, onRefresh, onDelete, loading }) {
     const today = (new Date()).toISOString().split("T")[0];
     const ACCT_OPTS = ["Home", "Portfolio", "Lifestyle", "Wedding"];
@@ -200,18 +262,38 @@
     const [expenseAmt, setExpenseAmt] = useState("");
     const [expenseAcc, setExpenseAcc] = useState("Home");
     const [filter, setFilter] = useState("All");
+    const [search, setSearch] = useState("");
+    const [showSearch, setShowSearch] = useState(false);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState("");
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
 
-    if (!data) return React.createElement(PageLoader, null);
+    if (!data) return h(PageLoader, null);
     const accts = dashData?.accounts;
     const filters = ["All", "Home", "Portfolio", "Lifestyle", "Wedding"];
     const transactionsList = Array.isArray(data.transactions) ? data.transactions : [];
-    let _runBal = data.balance;
-    const txsWithBalance = transactionsList.map(t => { const b = _runBal; _runBal -= t.amount; return { ...t, runningBalance: b }; });
-    const filtered = filter === "All" ? txsWithBalance : txsWithBalance.filter((t) => t.account === filter);
+
+    const q = search.trim().toLowerCase();
+    const filtered = transactionsList.filter((t) =>
+      (filter === "All" || t.account === filter) &&
+      (!q || (t.notes || "").toLowerCase().includes(q))
+    );
+
+    // Group by month, with per-month spend/income totals
+    const rows = [];
+    let curMonth = null;
+    filtered.forEach((t) => {
+      const ym = (t.date || "").slice(0, 7);
+      if (ym !== curMonth) {
+        curMonth = ym;
+        const monthTxs = filtered.filter((x) => (x.date || "").slice(0, 7) === ym);
+        const spent = monthTxs.reduce((s, x) => s + Math.min(0, toNum(x.amount)), 0);
+        const income = monthTxs.reduce((s, x) => s + Math.max(0, toNum(x.amount)), 0);
+        rows.push({ type: "header", key: "hdr-" + ym, label: monthLabel(ym), spent, income });
+      }
+      rows.push({ type: "tx", key: t.id, t });
+    });
 
     const hasIncome = incomeAmt !== "" && Number(incomeAmt) > 0;
     const hasExpense = expenseAmt !== "" && Number(expenseAmt) > 0;
@@ -255,124 +337,268 @@
       setDeleteTarget(null);
     };
 
-    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
-      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-        React.createElement("div", null,
-          React.createElement("h2", { style: { margin: 0, fontSize: 22, fontWeight: 700 } }, "Transactions"),
-          React.createElement("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "Total Cash: ", React.createElement("strong", { style: { fontFamily: MONO, color: C.text } }, fmt(data.balance)))
-        ),
-        React.createElement("div", { style: { display: "flex", gap: 8 } },
-          React.createElement("button", { onClick: onRefresh, disabled: loading, style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.6 : 1 } }, React.createElement(Icon, { name: "refresh", size: 16, color: C.sub })),
-          React.createElement("button", { onClick: () => { setShowForm(!showForm); setFormError(""); }, style: { background: C.accent, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, React.createElement(Icon, { name: "plus", size: 18, color: "#fff" }))
+    const acctSelect = (value, onChange, borderColor) => h("select", { value, onChange: (e) => onChange(e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, background: "#fff", color: C.text, outline: "none" } },
+      ACCT_OPTS.map((o) => h("option", { key: o, value: o }, o))
+    );
+
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
+      // Header row
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        h("h2", { style: { margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: -0.3 } }, "Transactions"),
+        h("div", { style: { display: "flex", gap: 8 } },
+          h("button", { onClick: () => { setShowSearch(!showSearch); if (showSearch) setSearch(""); }, style: { background: showSearch ? C.accentLight : C.card, border: `1px solid ${showSearch ? C.accent : C.border}`, borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, h(Icon, { name: "search", size: 16, color: showSearch ? C.accent : C.sub })),
+          h("button", { onClick: onRefresh, disabled: loading, style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.6 : 1 } }, h(Icon, { name: "refresh", size: 16, color: C.sub })),
+          h("button", { onClick: () => { setShowForm(!showForm); setFormError(""); }, style: { background: C.accent, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(45,90,39,0.35)" } }, h(Icon, { name: "plus", size: 18, color: "#fff" }))
         )
       ),
-      accts && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } },
-        [{ label: "Home", val: accts.home, icon: "home", color: C.accent, bg: C.accentLight },
-         { label: "Portfolio", val: accts.portfolio, icon: "chart", color: C.blue, bg: C.blueLight },
-         { label: "Lifestyle", val: accts.lifestyle, icon: "wallet", color: C.amber, bg: C.amberLight }].map((a) =>
-          React.createElement(Card, { key: a.label, style: { padding: 12, textAlign: "center" } },
-            React.createElement("div", { style: { width: 28, height: 28, borderRadius: 8, background: a.bg, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 6 } }, React.createElement(Icon, { name: a.icon, size: 13, color: a.color })),
-            React.createElement("div", { style: { fontSize: 9, color: C.sub, fontWeight: 700, letterSpacing: 0.6, marginBottom: 3 } }, a.label.toUpperCase()),
-            React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: C.text } }, fmt(a.val))
+      // Hero balance card
+      accts && h(Card, { style: { background: `linear-gradient(135deg,${C.accent},#1B3B17)`, border: "none", padding: "20px 20px 16px" } },
+        h("div", { style: { color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 700, letterSpacing: 0.8 } }, "TOTAL CASH"),
+        h("div", { style: { color: "#fff", fontSize: 32, fontWeight: 800, fontFamily: MONO, letterSpacing: -1, marginTop: 4 } }, fmt(data.balance)),
+        h("div", { style: { display: "flex", gap: 8, marginTop: 14 } },
+          [{ label: "Home", val: accts.home, emoji: "🏠" }, { label: "Portfolio", val: accts.portfolio, emoji: "📈" }, { label: "Lifestyle", val: accts.lifestyle, emoji: "✨" }].map((a) =>
+            h("div", { key: a.label, style: { flex: 1, background: "rgba(255,255,255,0.12)", borderRadius: 12, padding: "8px 10px" } },
+              h("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 9, fontWeight: 700, letterSpacing: 0.5, marginBottom: 2 } }, a.emoji + " " + a.label.toUpperCase()),
+              h("div", { style: { color: "#fff", fontSize: 14, fontWeight: 700, fontFamily: MONO } }, fmt(a.val))
+            )
           )
         )
       ),
-      showForm && React.createElement(Card, { style: { border: `2px solid ${C.accent}`, padding: 16 } },
-        React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14, color: C.text } }, "New Transaction"),
-        React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
-          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
-            React.createElement(InputField, { label: "Date", type: "date", value: date, onChange: setDate }),
-            React.createElement(InputField, { label: "Description", value: notes, onChange: (v) => { setNotes(v); setFormError(""); }, placeholder: "e.g. salary, groceries" })
+      // Search bar
+      showSearch && h("input", { type: "text", value: search, autoFocus: true, onChange: (e) => setSearch(e.target.value), placeholder: "Search descriptions…", style: { width: "100%", padding: "11px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text, boxSizing: "border-box" } }),
+      // New transaction form
+      showForm && h(Card, { style: { border: `2px solid ${C.accent}`, padding: 16 } },
+        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14, color: C.text } }, "New Transaction"),
+        h("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
+          h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+            h(InputField, { label: "Date", type: "date", value: date, onChange: setDate }),
+            h(InputField, { label: "Description", value: notes, onChange: (v) => { setNotes(v); setFormError(""); }, placeholder: "e.g. salary, groceries" })
           ),
-          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
-            React.createElement("div", { style: { background: "#F0FFF4", border: `2px solid ${C.accent}`, borderRadius: 12, padding: 12 } },
-              React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.accent, marginBottom: 8, letterSpacing: 0.5 } }, "+ INCOME"),
-              React.createElement("div", { style: { marginBottom: 8 } },
-                React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Account"),
-                React.createElement("select", { value: incomeAcc, onChange: (e) => setIncomeAcc(e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, background: "#fff", color: C.text, outline: "none" } },
-                  ACCT_OPTS.map((o) => React.createElement("option", { key: o, value: o }, o))
-                )
+          h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+            h("div", { style: { background: "#FFF5F5", border: `2px solid ${C.red}`, borderRadius: 12, padding: 12 } },
+              h("div", { style: { fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 8, letterSpacing: 0.5 } }, "− EXPENSE"),
+              h("div", { style: { marginBottom: 8 } },
+                h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Account"),
+                acctSelect(expenseAcc, setExpenseAcc, C.red)
               ),
-              React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Amount ($)"),
-              React.createElement("input", { type: "number", inputMode: "decimal", min: "0", value: incomeAmt,
-                onChange: (e) => { setIncomeAmt(e.target.value.replace(/[^0-9.]/g, "")); setFormError(""); },
-                placeholder: "0",
-                style: { width: "100%", padding: "8px 10px", border: `1px solid ${C.accent}`, borderRadius: 8, fontSize: 18, fontFamily: MONO, fontWeight: 700, color: C.accent, background: "#fff", outline: "none", boxSizing: "border-box" }
-              })
-            ),
-            React.createElement("div", { style: { background: "#FFF5F5", border: `2px solid ${C.red}`, borderRadius: 12, padding: 12 } },
-              React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 8, letterSpacing: 0.5 } }, "− EXPENSE"),
-              React.createElement("div", { style: { marginBottom: 8 } },
-                React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Account"),
-                React.createElement("select", { value: expenseAcc, onChange: (e) => setExpenseAcc(e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, background: "#fff", color: C.text, outline: "none" } },
-                  ACCT_OPTS.map((o) => React.createElement("option", { key: o, value: o }, o))
-                )
-              ),
-              React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Amount ($)"),
-              React.createElement("input", { type: "number", inputMode: "decimal", min: "0", value: expenseAmt,
+              h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Amount ($)"),
+              h("input", { type: "number", inputMode: "decimal", min: "0", value: expenseAmt,
                 onChange: (e) => { setExpenseAmt(e.target.value.replace(/[^0-9.]/g, "")); setFormError(""); },
                 placeholder: "0",
                 style: { width: "100%", padding: "8px 10px", border: `1px solid ${C.red}`, borderRadius: 8, fontSize: 18, fontFamily: MONO, fontWeight: 700, color: C.red, background: "#fff", outline: "none", boxSizing: "border-box" }
               })
+            ),
+            h("div", { style: { background: "#F0FFF4", border: `2px solid ${C.accent}`, borderRadius: 12, padding: 12 } },
+              h("div", { style: { fontSize: 11, fontWeight: 700, color: C.accent, marginBottom: 8, letterSpacing: 0.5 } }, "+ INCOME"),
+              h("div", { style: { marginBottom: 8 } },
+                h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Account"),
+                acctSelect(incomeAcc, setIncomeAcc, C.accent)
+              ),
+              h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Amount ($)"),
+              h("input", { type: "number", inputMode: "decimal", min: "0", value: incomeAmt,
+                onChange: (e) => { setIncomeAmt(e.target.value.replace(/[^0-9.]/g, "")); setFormError(""); },
+                placeholder: "0",
+                style: { width: "100%", padding: "8px 10px", border: `1px solid ${C.accent}`, borderRadius: 8, fontSize: 18, fontFamily: MONO, fontWeight: 700, color: C.accent, background: "#fff", outline: "none", boxSizing: "border-box" }
+              })
             )
           ),
-          isTransfer && React.createElement("div", { style: { background: "#F0FFF4", border: `1px solid ${C.accent}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, color: C.accent, fontWeight: 600, textAlign: "center" } },
+          isTransfer && h("div", { style: { background: "#F0FFF4", border: `1px solid ${C.accent}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, color: C.accent, fontWeight: 600, textAlign: "center" } },
             amountsMatch ? "↔ Transfer — amounts match ✓" : "⚠ Amounts must be equal to transfer"
           ),
-          formError ? React.createElement("div", { style: { color: C.red, fontSize: 12, fontWeight: 600, textAlign: "center" } }, formError) : null,
-          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
-            React.createElement("button", { onClick: resetForm, style: { background: C.bg, color: C.sub, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 0", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT } }, "Cancel"),
-            React.createElement("button", { onClick: handleSubmit, disabled: saving || !canSave, style: { background: canSave ? C.accent : C.muted, color: "#fff", border: "none", borderRadius: 10, padding: "12px 0", fontWeight: 700, fontSize: 14, cursor: canSave ? "pointer" : "default", fontFamily: FONT, opacity: saving ? 0.7 : 1 } }, saving ? "Saving..." : "Save")
+          formError ? h("div", { style: { color: C.red, fontSize: 12, fontWeight: 600, textAlign: "center" } }, formError) : null,
+          h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+            h("button", { onClick: resetForm, style: { background: C.bg, color: C.sub, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 0", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT } }, "Cancel"),
+            h("button", { onClick: handleSubmit, disabled: saving || !canSave, style: { background: canSave ? C.accent : C.muted, color: "#fff", border: "none", borderRadius: 10, padding: "12px 0", fontWeight: 700, fontSize: 14, cursor: canSave ? "pointer" : "default", fontFamily: FONT, opacity: saving ? 0.7 : 1 } }, saving ? "Saving..." : "Save")
           )
         )
       ),
-      React.createElement("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 } },
-        filters.map((a) => React.createElement("button", { key: a, onClick: () => setFilter(a), style: { background: filter === a ? C.accent : C.card, color: filter === a ? "#fff" : C.sub, border: filter === a ? "none" : `1px solid ${C.border}`, borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: FONT } }, a))
+      // Account filters
+      h("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 } },
+        filters.map((a) => h("button", { key: a, onClick: () => setFilter(a), style: { background: filter === a ? C.accent : C.card, color: filter === a ? "#fff" : C.sub, border: filter === a ? "none" : `1px solid ${C.border}`, borderRadius: 20, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: FONT } }, a))
       ),
-      React.createElement(Card, { style: { padding: 0, overflow: "hidden" } },
+      // Grouped list
+      h(Card, { style: { padding: 0, overflow: "hidden" } },
         filtered.length === 0
-          ? React.createElement("div", { style: { padding: 40, textAlign: "center", color: C.muted, fontSize: 14 } }, "No transactions found")
-          : filtered.map((t, i) => {
+          ? h("div", { style: { padding: 40, textAlign: "center", color: C.muted, fontSize: 14 } }, "No transactions found")
+          : rows.map((row, i) => {
+              if (row.type === "header") {
+                return h("div", { key: row.key, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 16px", background: C.bg, borderBottom: `1px solid ${C.border}`, borderTop: i > 0 ? `1px solid ${C.border}` : "none" } },
+                  h("span", { style: { fontSize: 11, fontWeight: 800, color: C.sub, letterSpacing: 0.6, textTransform: "uppercase" } }, row.label),
+                  h("span", { style: { fontSize: 11, fontFamily: MONO, fontWeight: 600 } },
+                    h("span", { style: { color: C.accent } }, "+" + fmt(row.income).replace("$", "$")),
+                    h("span", { style: { color: C.muted } }, "  ·  "),
+                    h("span", { style: { color: C.red } }, fmt(row.spent))
+                  )
+                );
+              }
+              const t = row.t;
               const amt = toNum(t.amount);
-              const rowBg = amt < 0 ? "#FFF5F5" : "#F0FFF4";
-              const iconBg = amt < 0 ? C.redLight : C.accentLight;
-              return React.createElement("div", { key: `${t.date||""}-${t.account||""}-${t.notes||""}-${t.amount||0}-${i}`,
-                style: { display: "flex", alignItems: "center", padding: "13px 16px", borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : "none", gap: 10, background: rowBg, borderRadius: i === 0 ? "16px 16px 0 0" : i === filtered.length - 1 ? "0 0 16px 16px" : 0 } },
-                React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
-                  React.createElement("span", { style: { fontSize: 14 } }, t.account === "Wedding" ? "💍" : t.account === "Home" ? "🏠" : t.account === "Portfolio" ? "📈" : t.account === "Lifestyle" ? "✨" : "💰")
+              const meta = ACCT_META[t.account] || { emoji: "💰", color: C.sub, light: C.bg };
+              return h("div", { key: row.key, style: { display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, gap: 10, background: C.card } },
+                h("div", { style: { width: 36, height: 36, borderRadius: 10, background: meta.light, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+                  h("span", { style: { fontSize: 15 } }, meta.emoji)
                 ),
-                React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-                  React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.notes),
-                  React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, t.account, " • ", t.date)
+                h("div", { style: { flex: 1, minWidth: 0 } },
+                  h("div", { style: { fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.notes),
+                  h("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, t.account, " · ", t.date)
                 ),
-                React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 } },
-                  React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: amt < 0 ? C.red : C.accent } },
-                    toNum(t.amount) < 0 ? `-$${Math.abs(toNum(t.amount)).toLocaleString()}` : `+$${toNum(t.amount).toLocaleString()}`
+                h("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 } },
+                  h("div", { style: { fontSize: 14, fontWeight: 700, fontFamily: MONO, color: amt < 0 ? C.red : C.accent } },
+                    amt < 0 ? `-$${Math.abs(amt).toLocaleString()}` : `+$${amt.toLocaleString()}`
                   ),
-                  React.createElement("div", { style: { fontSize: 11, color: C.muted, fontFamily: MONO, marginTop: 1 } }, fmt(t.runningBalance))
+                  t.balAfter !== undefined && h("div", { style: { fontSize: 10.5, color: C.muted, fontFamily: MONO, marginTop: 2 } },
+                    (t.balAccount === t.account ? "" : t.balAccount + " ") + fmt(t.balAfter)
+                  )
                 ),
-                React.createElement("button", { onClick: () => setDeleteTarget({ ...t, index: transactionsList.indexOf(t) }), title: "Delete", style: { background: "transparent", border: "none", width: 28, height: 28, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 } },
-                  React.createElement("svg", { width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: C.red, strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" },
-                    React.createElement("polyline", { points: "3 6 5 6 21 6" }),
-                    React.createElement("path", { d: "M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2" }),
-                    React.createElement("path", { d: "M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" }),
-                    React.createElement("line", { x1: "10", y1: "11", x2: "10", y2: "17" }),
-                    React.createElement("line", { x1: "14", y1: "11", x2: "14", y2: "17" })
+                h("button", { onClick: () => setDeleteTarget(t), title: "Delete", style: { background: "transparent", border: "none", width: 26, height: 26, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0, opacity: 0.7 } },
+                  h("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: C.red, strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" },
+                    h("polyline", { points: "3 6 5 6 21 6" }),
+                    h("path", { d: "M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2" }),
+                    h("path", { d: "M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" }),
+                    h("line", { x1: "10", y1: "11", x2: "10", y2: "17" }),
+                    h("line", { x1: "14", y1: "11", x2: "14", y2: "17" })
                   )
                 )
               );
             })
       ),
-      React.createElement(ConfirmDialog, { open: !!deleteTarget, title: "Delete transaction?",
+      h(ConfirmDialog, { open: !!deleteTarget, title: "Delete transaction?",
         message: deleteTarget ? `Permanently delete:\n${deleteTarget.notes}\n${deleteTarget.account} • ${deleteTarget.date} • ${fmt(deleteTarget.amount)}` : "",
         confirmLabel: "Delete", onConfirm: handleDelete, onCancel: () => !deleting && setDeleteTarget(null), busy: deleting })
     );
   }
 
+  // ————— Stats / Insights —————
+  function StatsPage({ txData, onRefresh, loading }) {
+    const [month, setMonth] = useState(thisMonth());
+    if (!txData) return h(PageLoader, null);
+    const txs = txData.transactions || [];
+
+    const monthTxs = txs.filter((t) => (t.date || "").slice(0, 7) === month);
+    const income = monthTxs.reduce((s, t) => s + Math.max(0, toNum(t.amount)), 0);
+    const spent = monthTxs.reduce((s, t) => s + Math.min(0, toNum(t.amount)), 0);
+    const net = income + spent;
+
+    // Per-account breakdown for the month
+    const ACCOUNTS = ["Home", "Portfolio", "Lifestyle", "Wedding"];
+    const perAcct = ACCOUNTS.map((a) => {
+      const list = monthTxs.filter((t) => t.account === a);
+      return {
+        account: a,
+        spent: list.reduce((s, t) => s + Math.min(0, toNum(t.amount)), 0),
+        income: list.reduce((s, t) => s + Math.max(0, toNum(t.amount)), 0)
+      };
+    });
+    const maxSpent = Math.max(...perAcct.map((a) => Math.abs(a.spent)), 1);
+    const totalSpentAbs = Math.abs(spent) || 1;
+
+    // 6-month expense trend ending at selected month
+    const trendMonths = [];
+    for (let i = 5; i >= 0; i--) trendMonths.push(shiftMonth(month, -i));
+    const trend = trendMonths.map((ym) => ({
+      ym,
+      spent: Math.abs(txs.filter((t) => (t.date || "").slice(0, 7) === ym).reduce((s, t) => s + Math.min(0, toNum(t.amount)), 0))
+    }));
+    const trendMax = Math.max(...trend.map((t) => t.spent), 1);
+
+    // Top 5 expenses of the month
+    const topExpenses = monthTxs.filter((t) => toNum(t.amount) < 0).sort((a, b) => toNum(a.amount) - toNum(b.amount)).slice(0, 5);
+
+    // Days elapsed for daily average (full month if past, day-of-month if current)
+    const isCurrent = month === thisMonth();
+    const [y, m] = month.split("-").map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const daysElapsed = isCurrent ? (new Date()).getDate() : daysInMonth;
+    const dailyAvg = Math.abs(spent) / Math.max(daysElapsed, 1);
+
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        h("h2", { style: { margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: -0.3 } }, "Stats"),
+        h("button", { onClick: onRefresh, disabled: loading, style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.6 : 1 } }, h(Icon, { name: "refresh", size: 16, color: C.sub }))
+      ),
+      // Month selector
+      h(Card, { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px" } },
+        h("button", { onClick: () => setMonth(shiftMonth(month, -1)), style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, h(Icon, { name: "chevL", size: 16, color: C.sub })),
+        h("div", { style: { fontSize: 15, fontWeight: 800, color: C.text } }, monthLabel(month)),
+        h("button", { onClick: () => setMonth(shiftMonth(month, 1)), disabled: isCurrent, style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, cursor: isCurrent ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: isCurrent ? 0.35 : 1 } }, h(Icon, { name: "chevR", size: 16, color: C.sub }))
+      ),
+      // Summary
+      h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } },
+        [{ label: "INCOME", val: income, color: C.accent, bg: C.accentLight },
+         { label: "SPENT", val: spent, color: C.red, bg: C.redLight },
+         { label: "NET", val: net, color: net >= 0 ? C.blue : C.red, bg: net >= 0 ? C.blueLight : C.redLight }].map((s) =>
+          h(Card, { key: s.label, style: { padding: "12px 10px", textAlign: "center", background: s.bg, border: "none" } },
+            h("div", { style: { fontSize: 9, fontWeight: 800, color: s.color, letterSpacing: 0.8, marginBottom: 4 } }, s.label),
+            h("div", { style: { fontSize: 15, fontWeight: 800, fontFamily: MONO, color: s.color } }, fmt(s.val))
+          )
+        )
+      ),
+      // Daily average
+      h(Card, { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px" } },
+        h("div", { style: { fontSize: 13, fontWeight: 600, color: C.sub } }, "Daily average spend", isCurrent ? ` (${daysElapsed} days so far)` : ""),
+        h("div", { style: { fontSize: 16, fontWeight: 800, fontFamily: MONO, color: C.text } }, fmt(dailyAvg) + "/day")
+      ),
+      // Spending by account
+      h(Card, null,
+        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14 } }, "Spending by Account"),
+        perAcct.every((a) => a.spent === 0)
+          ? h("div", { style: { padding: 12, textAlign: "center", color: C.muted, fontSize: 13 } }, "No spending this month")
+          : perAcct.filter((a) => a.spent < 0 || a.income > 0).map((a, i, arr) => {
+              const meta = ACCT_META[a.account];
+              const share = Math.abs(a.spent) / totalSpentAbs;
+              return h("div", { key: a.account, style: { marginBottom: i < arr.length - 1 ? 14 : 0 } },
+                h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
+                  h("span", { style: { fontSize: 13, fontWeight: 700 } }, meta.emoji + " " + a.account),
+                  h("span", { style: { fontSize: 12, fontFamily: MONO } },
+                    a.income > 0 ? h("span", { style: { color: C.accent, fontWeight: 600 } }, "+" + fmt(a.income) + "  ") : null,
+                    h("span", { style: { color: a.spent < 0 ? C.red : C.muted, fontWeight: 700 } }, fmt(a.spent)),
+                    a.spent < 0 ? h("span", { style: { color: C.muted } }, "  " + pct(share)) : null
+                  )
+                ),
+                h("div", { style: { background: C.bg, borderRadius: 4, height: 8, overflow: "hidden" } },
+                  h("div", { style: { width: `${Math.abs(a.spent) / maxSpent * 100}%`, height: "100%", background: meta.color, borderRadius: 4, transition: "width 0.3s" } })
+                )
+              );
+            })
+      ),
+      // 6-month trend
+      h(Card, null,
+        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14 } }, "Spending Trend"),
+        h("div", { style: { display: "flex", alignItems: "flex-end", gap: 8, height: 110 } },
+          trend.map((t) => {
+            const active = t.ym === month;
+            const barH = Math.max(t.spent / trendMax * 78, t.spent > 0 ? 4 : 2);
+            return h("div", { key: t.ym, onClick: () => setMonth(t.ym), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4, cursor: "pointer", height: "100%" } },
+              h("div", { style: { fontSize: 9, fontFamily: MONO, fontWeight: 600, color: active ? C.red : C.muted } }, t.spent > 0 ? fmt(t.spent).replace("$", "") : ""),
+              h("div", { style: { width: "100%", maxWidth: 34, height: barH, background: active ? C.red : "#EBD4D4", borderRadius: 6 } }),
+              h("div", { style: { fontSize: 10, fontWeight: active ? 800 : 500, color: active ? C.text : C.muted } }, monthShort(t.ym))
+            );
+          })
+        )
+      ),
+      // Top expenses
+      topExpenses.length > 0 && h(Card, null,
+        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 10 } }, "Biggest Expenses"),
+        topExpenses.map((t, i) => {
+          const meta = ACCT_META[t.account] || { emoji: "💰" };
+          return h("div", { key: t.id || i, style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: i < topExpenses.length - 1 ? `1px solid ${C.border}` : "none" } },
+            h("span", { style: { fontSize: 14, width: 22, textAlign: "center" } }, meta.emoji),
+            h("div", { style: { flex: 1, minWidth: 0 } },
+              h("div", { style: { fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.notes),
+              h("div", { style: { fontSize: 11, color: C.muted } }, t.account, " · ", t.date)
+            ),
+            h("div", { style: { fontSize: 13, fontWeight: 700, fontFamily: MONO, color: C.red } }, fmt(t.amount))
+          );
+        })
+      )
+    );
+  }
+
+  // ————— Assets —————
   function AssetsPage({ data, dashData, onUpdateGold, onRefresh, loading }) {
     const [editGold, setEditGold] = useState(false);
     const [goldInput, setGoldInput] = useState("");
-    if (!data || !dashData) return /* @__PURE__ */ React.createElement(PageLoader, null);
+    if (!data || !dashData) return h(PageLoader, null);
     const nw = dashData.netWorth || {};
     const handleGoldUpdate = async () => {
       if (!goldInput) return;
@@ -380,32 +606,179 @@
       setEditGold(false);
       setGoldInput("");
     };
-    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { style: { margin: 0, fontSize: 22, fontWeight: 700 } }, "Assets"), /* @__PURE__ */ React.createElement("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "Net worth & holdings")), /* @__PURE__ */ React.createElement("button", { onClick: onRefresh, disabled: loading, style: { background: C.accentLight, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement(Icon, { name: "refresh", size: 16, color: C.accent }))), /* @__PURE__ */ React.createElement(Card, { style: { background: `linear-gradient(135deg,${C.accent},#1B3B17)`, border: "none", padding: 28 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 500, marginBottom: 6 } }, "NET WORTH"), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 36, fontWeight: 800, fontFamily: MONO, letterSpacing: -1 } }, fmt(nw.total)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" } }, [{ label: "Cash", val: nw.totalCash }, { label: "Gold", val: nw.goldReserve }, { label: "Property", val: nw.property }, { label: "IBKR", val: nw.ibkr }].map(
-      (item) => /* @__PURE__ */ React.createElement("div", { key: item.label, style: { flex: "1 1 auto", minWidth: 70 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: 600, letterSpacing: 0.5, marginBottom: 2 } }, item.label.toUpperCase()), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 15, fontWeight: 600, fontFamily: MONO } }, fmt(item.val)))
-    ))), /* @__PURE__ */ React.createElement(Card, { style: { background: "linear-gradient(135deg,#A67C00,#7A5C00)", border: "none", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, "GOLD RESERVE"), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 28, fontWeight: 800, fontFamily: MONO, marginTop: 6 } }, fmt(data.totalGoldValue)), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 4 } }, data.totalGoldOz, " troy oz @ $", toNum(data.goldPrice).toLocaleString(), "/oz")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => {
-      setEditGold(!editGold);
-      setGoldInput(String(data.goldPrice));
-    }, style: { background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT } }, "Update Price"), /* @__PURE__ */ React.createElement("a", { href: "https://goldprice.org/", target: "_blank", rel: "noopener noreferrer", style: { background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT, textDecoration: "none", display: "inline-block" } }, "Check Price"))), editGold && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 14 } }, /* @__PURE__ */ React.createElement("input", { type: "number", value: goldInput, onChange: (e) => setGoldInput(e.target.value), placeholder: "New price/oz", style: { flex: 1, background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 14, fontFamily: MONO, outline: "none" } }), /* @__PURE__ */ React.createElement("button", { onClick: handleGoldUpdate, style: { background: "#fff", color: C.gold, border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: FONT } }, "Save"))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Gold Holdings"), data.goldEntries.map((g, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < data.goldEntries.length - 1 ? `1px solid ${C.border}` : "none" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, g.description), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, g.date, " \xB7 ", g.weight, " ", g.unit)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: C.gold } }, fmt(toNum(g.value)))))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Property & Vehicles"), data.properties.map((p, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", padding: "10px 0", borderBottom: i < data.properties.length - 1 ? `1px solid ${C.border}` : "none", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: p.type === "Property" ? C.blueLight : C.amberLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ React.createElement(Icon, { name: p.type === "Property" ? "building" : "car", size: 16, color: p.type === "Property" ? C.blue : C.amber })), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, p.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, p.type)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO } }, fmt(toNum(p.value))))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "12px 0 0", borderTop: `2px solid ${C.border}`, marginTop: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "Total"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, fontWeight: 800, fontFamily: MONO } }, fmt(data.properties.reduce((s, p) => s + toNum(p.value), 0))))));
-  }
-  function WeddingPage({ data, txData, onRefresh, loading }) {
-    if (!data) return /* @__PURE__ */ React.createElement(PageLoader, null);
-    const spent = Math.abs(toNum(data.totalSpent));
-    const progress = Math.min(toNum(data.percentUsed), 1);
-    const weddingTxs = txData ? txData.transactions.filter((t) => t.account === "Wedding" || t.account && t.account.includes("Wedding")) : [];
-    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { style: { margin: 0, fontSize: 22, fontWeight: 700 } }, "Wedding"), /* @__PURE__ */ React.createElement("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "Budget tracker")), /* @__PURE__ */ React.createElement("button", { onClick: onRefresh, disabled: loading, style: { background: C.accentLight, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement(Icon, { name: "refresh", size: 16, color: C.accent }))), /* @__PURE__ */ React.createElement(Card, { style: { background: "linear-gradient(135deg,#8B5CF6,#6D28D9)", border: "none", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, "REMAINING BUDGET"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 32, fontWeight: 800, fontFamily: MONO } }, fmt(data.remaining)), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.7)", fontSize: 14 } }, "of ", fmt(data.totalBudget))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16, background: "rgba(255,255,255,0.15)", borderRadius: 6, height: 8, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { width: `${progress * 100}%`, height: "100%", background: "#fff", borderRadius: 6 } })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12 } }, "Spent: ", fmt(spent)), /* @__PURE__ */ React.createElement("span", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12 } }, pct(progress), " used"))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement(StatCard, { label: "Total Budget", value: fmt(data.totalBudget), icon: "wallet", color: C.blue, bg: C.blueLight }), /* @__PURE__ */ React.createElement(StatCard, { label: "Total Spent", value: fmt(spent), icon: "trending", color: C.red, bg: C.redLight })), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Wedding Payments"), weddingTxs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: 20, textAlign: "center", color: C.muted, fontSize: 13 } }, "No wedding transactions yet") : weddingTxs.map((t, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < weddingTxs.length - 1 ? `1px solid ${C.border}` : "none" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, t.notes), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, t.date)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, fontFamily: MONO, color: C.red } }, fmt(toNum(t.amount)))))));
-  }
-  function InvestmentsPage({ data, onRefresh, loading }) {
-    if (!data) return /* @__PURE__ */ React.createElement(PageLoader, null);
-    const maxVal = Math.max(...data.projections.map((p) => toNum(p.portfolioValue)), 0);
-    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { style: { margin: 0, fontSize: 22, fontWeight: 700 } }, "Investments"), /* @__PURE__ */ React.createElement("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "IBKR Portfolio")), /* @__PURE__ */ React.createElement("button", { onClick: onRefresh, disabled: loading, style: { background: C.accentLight, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement(Icon, { name: "refresh", size: 16, color: C.accent }))), /* @__PURE__ */ React.createElement(Card, { style: { background: `linear-gradient(135deg,${C.blue},#1A365D)`, border: "none", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, "IBKR BALANCE"), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 32, fontWeight: 800, fontFamily: MONO, marginTop: 6 } }, fmt(data.balance)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 20, marginTop: 16 } }, [{ label: "MONTHLY", val: fmt(data.monthlyContribution) }, { label: "RETURN", val: pct(data.annualReturn) }, { label: "CONTRIBUTED", val: fmt(data.totalContributed) }].map(
-      (s) => /* @__PURE__ */ React.createElement("div", { key: s.label }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: 600 } }, s.label), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 15, fontWeight: 600, fontFamily: MONO } }, s.val))
-    ))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14 } }, "Target Allocation"), data.allocations.map((a, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { marginBottom: i < data.allocations.length - 1 ? 14 : 0 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 600 } }, a.etf), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, fontFamily: MONO, color: C.accent } }, pct(a.target))), /* @__PURE__ */ React.createElement("div", { style: { background: C.bg, borderRadius: 4, height: 6, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { width: `${a.target * 100}%`, height: "100%", background: i === 0 ? C.accent : i === 1 ? C.blue : C.gold, borderRadius: 4 } }))))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14 } }, "10-Year Projection"), data.projections.map((p, i) => {
-      const barW = maxVal > 0 ? p.portfolioValue / maxVal * 100 : 0;
-      const savedW = maxVal > 0 ? p.ifSaved / maxVal * 100 : 0;
-      return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 0" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 50, fontSize: 11, color: C.sub, fontWeight: 600, flexShrink: 0 } }, p.year.replace("Year ", "Yr ")), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, position: "relative", height: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 0, left: 0, width: `${barW}%`, height: "100%", background: `linear-gradient(90deg,${C.accentLight},${C.accent}40)`, borderRadius: 4 } }), /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 6, left: 0, width: `${savedW}%`, height: 6, background: `${C.muted}30`, borderRadius: 3 } })), /* @__PURE__ */ React.createElement("div", { style: { width: 70, fontSize: 11, fontWeight: 700, fontFamily: MONO, color: C.accent, textAlign: "right", flexShrink: 0 } }, fmt(p.portfolioValue)));
-    }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 12, fontSize: 11, color: C.muted } }, /* @__PURE__ */ React.createElement("span", null, "■ With returns"), /* @__PURE__ */ React.createElement("span", { style: { opacity: 0.5 } }, "■ If just saved"))));
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        h("div", null,
+          h("h2", { style: { margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: -0.3 } }, "Assets"),
+          h("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "Net worth & holdings")
+        ),
+        h("button", { onClick: onRefresh, disabled: loading, style: { background: C.accentLight, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 } }, h(Icon, { name: "refresh", size: 16, color: C.accent }))
+      ),
+      h(Card, { style: { background: `linear-gradient(135deg,${C.accent},#1B3B17)`, border: "none", padding: 28 } },
+        h("div", { style: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 500, marginBottom: 6 } }, "NET WORTH"),
+        h("div", { style: { color: "#fff", fontSize: 36, fontWeight: 800, fontFamily: MONO, letterSpacing: -1 } }, fmt(nw.total)),
+        h("div", { style: { display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" } },
+          [{ label: "Cash", val: nw.totalCash }, { label: "Gold", val: nw.goldReserve }, { label: "Property", val: nw.property }, { label: "IBKR", val: nw.ibkr }].map(
+            (item) => h("div", { key: item.label, style: { flex: "1 1 auto", minWidth: 70 } },
+              h("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: 600, letterSpacing: 0.5, marginBottom: 2 } }, item.label.toUpperCase()),
+              h("div", { style: { color: "#fff", fontSize: 15, fontWeight: 600, fontFamily: MONO } }, fmt(item.val))
+            )
+          )
+        )
+      ),
+      h(Card, { style: { background: "linear-gradient(135deg,#A67C00,#7A5C00)", border: "none", padding: 24 } },
+        h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } },
+          h("div", null,
+            h("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, "GOLD RESERVE"),
+            h("div", { style: { color: "#fff", fontSize: 28, fontWeight: 800, fontFamily: MONO, marginTop: 6 } }, fmt(data.totalGoldValue)),
+            h("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 4 } }, data.totalGoldOz.toFixed ? data.totalGoldOz.toFixed(2) : data.totalGoldOz, " troy oz @ $", toNum(data.goldPrice).toLocaleString(), "/oz")
+          ),
+          h("div", { style: { display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" } },
+            h("button", { onClick: () => { setEditGold(!editGold); setGoldInput(String(data.goldPrice)); }, style: { background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT } }, "Update Price"),
+            h("a", { href: "https://goldprice.org/", target: "_blank", rel: "noopener noreferrer", style: { background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT, textDecoration: "none", display: "inline-block" } }, "Check Price")
+          )
+        ),
+        editGold && h("div", { style: { display: "flex", gap: 8, marginTop: 14 } },
+          h("input", { type: "number", value: goldInput, onChange: (e) => setGoldInput(e.target.value), placeholder: "New price/oz", style: { flex: 1, background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 14, fontFamily: MONO, outline: "none" } }),
+          h("button", { onClick: handleGoldUpdate, style: { background: "#fff", color: C.gold, border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: FONT } }, "Save")
+        )
+      ),
+      h(Card, null,
+        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Gold Holdings"),
+        data.goldEntries.map((g, i) => h("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < data.goldEntries.length - 1 ? `1px solid ${C.border}` : "none" } },
+          h("div", null,
+            h("div", { style: { fontSize: 13, fontWeight: 600 } }, g.description),
+            h("div", { style: { fontSize: 11, color: C.muted } }, g.date, " · ", g.weight, " ", g.unit)
+          ),
+          h("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO, color: C.gold } }, fmt(toNum(g.value)))
+        ))
+      ),
+      h(Card, null,
+        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Property & Vehicles"),
+        data.properties.map((p, i) => h("div", { key: i, style: { display: "flex", alignItems: "center", padding: "10px 0", borderBottom: i < data.properties.length - 1 ? `1px solid ${C.border}` : "none", gap: 12 } },
+          h("div", { style: { width: 36, height: 36, borderRadius: 10, background: p.type === "Property" ? C.blueLight : C.amberLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+            h(Icon, { name: p.type === "Property" ? "building" : "car", size: 16, color: p.type === "Property" ? C.blue : C.amber })
+          ),
+          h("div", { style: { flex: 1 } },
+            h("div", { style: { fontSize: 13, fontWeight: 600 } }, p.name),
+            h("div", { style: { fontSize: 11, color: C.muted } }, p.type)
+          ),
+          h("div", { style: { fontSize: 15, fontWeight: 700, fontFamily: MONO } }, fmt(toNum(p.value)))
+        )),
+        h("div", { style: { display: "flex", justifyContent: "space-between", padding: "12px 0 0", borderTop: `2px solid ${C.border}`, marginTop: 4 } },
+          h("span", { style: { fontSize: 13, fontWeight: 700 } }, "Total"),
+          h("span", { style: { fontSize: 16, fontWeight: 800, fontFamily: MONO } }, fmt(data.properties.reduce((s, p) => s + toNum(p.value), 0)))
+        )
+      )
+    );
   }
 
+  // ————— Wedding —————
+  function WeddingPage({ data, txData, onRefresh, loading }) {
+    if (!data) return h(PageLoader, null);
+    const spent = Math.abs(toNum(data.totalSpent));
+    const progress = Math.min(toNum(data.percentUsed), 1);
+    const weddingTxs = txData ? txData.transactions.filter((t) => t.account === "Wedding" || (t.account && t.account.includes("Wedding"))) : [];
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        h("div", null,
+          h("h2", { style: { margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: -0.3 } }, "Wedding"),
+          h("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "Budget tracker")
+        ),
+        h("button", { onClick: onRefresh, disabled: loading, style: { background: C.accentLight, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, h(Icon, { name: "refresh", size: 16, color: C.accent }))
+      ),
+      h(Card, { style: { background: "linear-gradient(135deg,#8B5CF6,#6D28D9)", border: "none", padding: 24 } },
+        h("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, "REMAINING BUDGET"),
+        h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 8 } },
+          h("div", { style: { color: "#fff", fontSize: 32, fontWeight: 800, fontFamily: MONO } }, fmt(data.remaining)),
+          h("div", { style: { color: "rgba(255,255,255,0.7)", fontSize: 14 } }, "of ", fmt(data.totalBudget))
+        ),
+        h("div", { style: { marginTop: 16, background: "rgba(255,255,255,0.15)", borderRadius: 6, height: 8, overflow: "hidden" } },
+          h("div", { style: { width: `${progress * 100}%`, height: "100%", background: "#fff", borderRadius: 6 } })
+        ),
+        h("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 8 } },
+          h("span", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12 } }, "Spent: ", fmt(spent)),
+          h("span", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12 } }, pct(progress), " used")
+        )
+      ),
+      h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+        h(StatCard, { label: "Total Budget", value: fmt(data.totalBudget), icon: "wallet", color: C.blue, bg: C.blueLight }),
+        h(StatCard, { label: "Total Spent", value: fmt(spent), icon: "trending", color: C.red, bg: C.redLight })
+      ),
+      h(Card, null,
+        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "Wedding Payments"),
+        weddingTxs.length === 0
+          ? h("div", { style: { padding: 20, textAlign: "center", color: C.muted, fontSize: 13 } }, "No wedding transactions yet")
+          : weddingTxs.map((t, i) => h("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < weddingTxs.length - 1 ? `1px solid ${C.border}` : "none" } },
+              h("div", null,
+                h("div", { style: { fontSize: 13, fontWeight: 600 } }, t.notes),
+                h("div", { style: { fontSize: 11, color: C.muted } }, t.date)
+              ),
+              h("div", { style: { fontSize: 14, fontWeight: 700, fontFamily: MONO, color: C.red } }, fmt(toNum(t.amount)))
+            ))
+      )
+    );
+  }
+
+  // ————— Investments —————
+  function InvestmentsPage({ data, onRefresh, loading }) {
+    if (!data) return h(PageLoader, null);
+    const maxVal = Math.max(...data.projections.map((p) => toNum(p.portfolioValue)), 0);
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        h("div", null,
+          h("h2", { style: { margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: -0.3 } }, "Investments"),
+          h("p", { style: { margin: "4px 0 0", fontSize: 13, color: C.sub } }, "IBKR Portfolio")
+        ),
+        h("button", { onClick: onRefresh, disabled: loading, style: { background: C.accentLight, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, h(Icon, { name: "refresh", size: 16, color: C.accent }))
+      ),
+      h(Card, { style: { background: `linear-gradient(135deg,${C.blue},#1A365D)`, border: "none", padding: 24 } },
+        h("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, "IBKR BALANCE"),
+        h("div", { style: { color: "#fff", fontSize: 32, fontWeight: 800, fontFamily: MONO, marginTop: 6 } }, fmt(data.balance)),
+        h("div", { style: { display: "flex", gap: 20, marginTop: 16 } },
+          [{ label: "MONTHLY", val: fmt(data.monthlyContribution) }, { label: "RETURN", val: pct(data.annualReturn) }, { label: "CONTRIBUTED", val: fmt(data.totalContributed) }].map(
+            (s) => h("div", { key: s.label },
+              h("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: 600 } }, s.label),
+              h("div", { style: { color: "#fff", fontSize: 15, fontWeight: 600, fontFamily: MONO } }, s.val)
+            )
+          )
+        )
+      ),
+      h(Card, null,
+        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14 } }, "Target Allocation"),
+        data.allocations.map((a, i) => h("div", { key: i, style: { marginBottom: i < data.allocations.length - 1 ? 14 : 0 } },
+          h("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } },
+            h("span", { style: { fontSize: 13, fontWeight: 600 } }, a.etf),
+            h("span", { style: { fontSize: 13, fontWeight: 700, fontFamily: MONO, color: C.accent } }, pct(a.target))
+          ),
+          h("div", { style: { background: C.bg, borderRadius: 4, height: 6, overflow: "hidden" } },
+            h("div", { style: { width: `${a.target * 100}%`, height: "100%", background: i === 0 ? C.accent : i === 1 ? C.blue : C.gold, borderRadius: 4 } })
+          )
+        ))
+      ),
+      h(Card, null,
+        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14 } }, "10-Year Projection"),
+        data.projections.map((p, i) => {
+          const barW = maxVal > 0 ? p.portfolioValue / maxVal * 100 : 0;
+          const savedW = maxVal > 0 ? p.ifSaved / maxVal * 100 : 0;
+          return h("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 0" } },
+            h("div", { style: { width: 50, fontSize: 11, color: C.sub, fontWeight: 600, flexShrink: 0 } }, p.year.replace("Year ", "Yr ")),
+            h("div", { style: { flex: 1, position: "relative", height: 18 } },
+              h("div", { style: { position: "absolute", top: 0, left: 0, width: `${barW}%`, height: "100%", background: `linear-gradient(90deg,${C.accentLight},${C.accent}40)`, borderRadius: 4 } }),
+              h("div", { style: { position: "absolute", top: 6, left: 0, width: `${savedW}%`, height: 6, background: `${C.muted}30`, borderRadius: 3 } })
+            ),
+            h("div", { style: { width: 70, fontSize: 11, fontWeight: 700, fontFamily: MONO, color: C.accent, textAlign: "right", flexShrink: 0 } }, fmt(p.portfolioValue))
+          );
+        }),
+        h("div", { style: { display: "flex", gap: 16, marginTop: 12, fontSize: 11, color: C.muted } },
+          h("span", null, "■ With returns"),
+          h("span", { style: { opacity: 0.5 } }, "■ If just saved")
+        )
+      )
+    );
+  }
+
+  // ————— Lock screen —————
   function LockScreen({ onUnlock }) {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
@@ -420,29 +793,42 @@
         setError("Wrong username or password");
       }
     };
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.bg } }, /* @__PURE__ */ React.createElement(Card, { style: { width: "100%", maxWidth: 360, padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 6, textAlign: "center" } }, "Personal Finance"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: C.sub, marginBottom: 18, textAlign: "center" } }, "Sign in to continue"), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSubmit, style: { display: "flex", flexDirection: "column", gap: 12 } }, /* @__PURE__ */ React.createElement("input", { type: "text", name: "username", autoComplete: "username", value: username, onChange: (e) => { setUsername(e.target.value); if (error) setError(""); }, autoFocus: true, placeholder: "Username", style: { width: "100%", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text } }), /* @__PURE__ */ React.createElement("input", { type: "password", name: "password", autoComplete: "current-password", value: password, onChange: (e) => { setPassword(e.target.value); if (error) setError(""); }, placeholder: "Password", style: { width: "100%", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text } }), error ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.red, marginTop: -4 } }, error) : null, /* @__PURE__ */ React.createElement("button", { type: "submit", style: { background: C.accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: FONT } }, "Sign in"))));
-  }
-
-  function MigrationScreen({ onMigrate, migrating, migrateStatus }) {
-    return React.createElement("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.bg } },
-      React.createElement(Card, { style: { width: "100%", maxWidth: 380, padding: 28, textAlign: "center" } },
-        React.createElement("div", { style: { fontSize: 40, marginBottom: 16 } }, "📊"),
-        React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8 } }, "First-time Setup"),
-        React.createElement("div", { style: { fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 24 } },
-          "Firebase is empty. Import your existing data from Google Sheets to get started. This only needs to be done once."
-        ),
-        React.createElement("button", { onClick: onMigrate, disabled: migrating,
-          style: { width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 700, fontSize: 15, cursor: migrating ? "default" : "pointer", fontFamily: FONT, opacity: migrating ? 0.7 : 1 } },
-          migrating ? "Importing from Sheets..." : "Import from Google Sheets"
-        ),
-        migrating && React.createElement("div", { style: { marginTop: 14, fontSize: 12, color: C.muted } }, "This may take 10–20 seconds…"),
-        migrateStatus && migrateStatus.map((line, i) =>
-          React.createElement("div", { key: i, style: { marginTop: i === 0 ? 16 : 4, fontSize: 11, fontFamily: MONO, color: line.startsWith("✗") ? C.red : line.startsWith("✓") ? C.accent : C.sub, textAlign: "left", wordBreak: "break-all" } }, line)
+    return h("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.bg } },
+      h(Card, { style: { width: "100%", maxWidth: 360, padding: 24 } },
+        h("div", { style: { fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 6, textAlign: "center" } }, "Personal Finance"),
+        h("div", { style: { fontSize: 13, color: C.sub, marginBottom: 18, textAlign: "center" } }, "Sign in to continue"),
+        h("form", { onSubmit: handleSubmit, style: { display: "flex", flexDirection: "column", gap: 12 } },
+          h("input", { type: "text", name: "username", autoComplete: "username", value: username, onChange: (e) => { setUsername(e.target.value); if (error) setError(""); }, autoFocus: true, placeholder: "Username", style: { width: "100%", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text } }),
+          h("input", { type: "password", name: "password", autoComplete: "current-password", value: password, onChange: (e) => { setPassword(e.target.value); if (error) setError(""); }, placeholder: "Password", style: { width: "100%", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text } }),
+          error ? h("div", { style: { fontSize: 12, color: C.red, marginTop: -4 } }, error) : null,
+          h("button", { type: "submit", style: { background: C.accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: FONT } }, "Sign in")
         )
       )
     );
   }
 
+  // ————— Migration —————
+  function MigrationScreen({ onMigrate, migrating, migrateStatus }) {
+    return h("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.bg } },
+      h(Card, { style: { width: "100%", maxWidth: 380, padding: 28, textAlign: "center" } },
+        h("div", { style: { fontSize: 40, marginBottom: 16 } }, "📊"),
+        h("div", { style: { fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8 } }, "First-time Setup"),
+        h("div", { style: { fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 24 } },
+          "Firebase is empty. Import your existing data from Google Sheets to get started. This only needs to be done once."
+        ),
+        h("button", { onClick: onMigrate, disabled: migrating,
+          style: { width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 700, fontSize: 15, cursor: migrating ? "default" : "pointer", fontFamily: FONT, opacity: migrating ? 0.7 : 1 } },
+          migrating ? "Importing from Sheets..." : "Import from Google Sheets"
+        ),
+        migrating && h("div", { style: { marginTop: 14, fontSize: 12, color: C.muted } }, "This may take 10–20 seconds…"),
+        migrateStatus && migrateStatus.map((line, i) =>
+          h("div", { key: i, style: { marginTop: i === 0 ? 16 : 4, fontSize: 11, fontFamily: MONO, color: line.startsWith("✗") ? C.red : line.startsWith("✓") ? C.accent : C.sub, textAlign: "left", wordBreak: "break-all" } }, line)
+        )
+      )
+    );
+  }
+
+  // ————— App —————
   function App() {
     const [isUnlocked, setIsUnlocked] = useState(() => {
       try { return localStorage.getItem("personal_finance_unlocked") === "true"; } catch(e) { return false; }
@@ -463,11 +849,27 @@
       const gPrice = toNum(goldPrice);
       const list = txRaw ? sortTx(Object.entries(txRaw).map(([id, t]) => ({ ...t, id, amount: Number(t.amount) }))) : [];
 
-      // Account balances from transactions
-      const weddingBal = list.filter(t => t.account === "Wedding").reduce((s, t) => s + t.amount, 0);
-      const homebal = list.filter(t => t.account === "Home").reduce((s, t) => s + t.amount, 0) + weddingBal; // wedding deducts from home
-      const portbal = list.filter(t => t.account === "Portfolio").reduce((s, t) => s + t.amount, 0);
-      const lifebal = list.filter(t => t.account === "Lifestyle").reduce((s, t) => s + t.amount, 0);
+      // Per-account running balances: walk chronologically (oldest → newest).
+      // Wedding is a sub-account of Home — its transactions also move Home's
+      // balance, and Wedding rows display Home's balance after the transaction.
+      const bals = { Home: 0, Portfolio: 0, Lifestyle: 0, Wedding: 0 };
+      for (let i = list.length - 1; i >= 0; i--) {
+        const t = list[i];
+        if (t.account === "Wedding") {
+          bals.Wedding += t.amount;
+          bals.Home += t.amount;
+          t.balAfter = bals.Home;
+          t.balAccount = "Home";
+        } else if (Object.prototype.hasOwnProperty.call(bals, t.account)) {
+          bals[t.account] += t.amount;
+          t.balAfter = bals[t.account];
+          t.balAccount = t.account;
+        }
+      }
+
+      const homebal = bals.Home;
+      const portbal = bals.Portfolio;
+      const lifebal = bals.Lifestyle;
       const totalCash = homebal + portbal + lifebal;
 
       // Gold
@@ -486,8 +888,7 @@
       const ibkr = toNum(inv?.balance);
 
       // Wedding
-      const weddingTxs = list.filter(t => t.account === "Wedding");
-      const weddingSpent = Math.abs(weddingTxs.reduce((s, t) => s + t.amount, 0));
+      const weddingSpent = Math.abs(bals.Wedding);
       const budget = toNum(weddingBudget);
 
       setTransactions({ transactions: list, balance: totalCash });
@@ -604,6 +1005,8 @@
       setTransactions(prev => prev ? { ...prev, transactions: sortTx(prev.transactions.map(t => t.id === optimisticId ? { ...t, id: result.name } : t)) } : prev);
       // Sync to Sheets in background (non-blocking)
       sheetsSync({ action: "addTransaction", ...form, firebaseId: result.name });
+      // Silent background reload so per-account running balances are recomputed
+      load();
       return { ok: true };
     };
 
@@ -624,6 +1027,8 @@
       if (!ok) { await load(); return { ok: false, message: "Firebase delete failed." }; }
       // Sync to Sheets in background
       sheetsSync({ action: "deleteTransaction", transaction });
+      // Silent background reload so per-account running balances are recomputed
+      load();
       return { ok: true };
     };
 
@@ -633,33 +1038,32 @@
       await load();
     };
 
-    if (!isUnlocked) return React.createElement(LockScreen, { onUnlock: () => setIsUnlocked(true) });
-    if (isEmpty) return React.createElement(MigrationScreen, { onMigrate: migrateFromSheets, migrating, migrateStatus });
+    if (!isUnlocked) return h(LockScreen, { onUnlock: () => setIsUnlocked(true) });
+    if (isEmpty) return h(MigrationScreen, { onMigrate: migrateFromSheets, migrating, migrateStatus });
 
-    return React.createElement("div", { style: { fontFamily: FONT, background: C.bg, minHeight: "100vh", color: C.text, maxWidth: 480, margin: "0 auto", position: "relative" } },
-      React.createElement("div", { style: { padding: "16px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" } },
-        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-          React.createElement("span", { style: { fontSize: 16, fontWeight: 800, letterSpacing: -0.3 } }, "Personal Finance")
-        ),
-        React.createElement("div", { style: { fontSize: 11, color: C.muted, fontFamily: MONO } }, (new Date()).toLocaleDateString("en-US", { month: "short", day: "numeric" }))
+    return h("div", { style: { fontFamily: FONT, background: C.bg, minHeight: "100vh", color: C.text, maxWidth: 480, margin: "0 auto", position: "relative" } },
+      h("div", { style: { padding: "16px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" } },
+        h("span", { style: { fontSize: 16, fontWeight: 800, letterSpacing: -0.3 } }, "Personal Finance"),
+        h("div", { style: { fontSize: 11, color: C.muted, fontFamily: MONO } }, (new Date()).toLocaleDateString("en-US", { month: "short", day: "numeric" }))
       ),
-      React.createElement("div", { style: { padding: "0 16px 100px" } },
-        page === "transactions" && React.createElement(TransactionsPage, { data: transactions, dashData: dashboard, onAdd: addTransaction, onRefresh: load, onDelete: deleteTransaction, loading }),
-        page === "assets" && React.createElement(AssetsPage, { data: assets, dashData: dashboard, onUpdateGold: updateGoldPrice, onRefresh: load, loading }),
-        page === "wedding" && React.createElement(WeddingPage, { data: wedding, txData: transactions, onRefresh: load, loading }),
-        page === "investments" && React.createElement(InvestmentsPage, { data: investments, onRefresh: load, loading })
+      h("div", { style: { padding: "0 16px 100px" } },
+        page === "transactions" && h(TransactionsPage, { data: transactions, dashData: dashboard, onAdd: addTransaction, onRefresh: load, onDelete: deleteTransaction, loading }),
+        page === "stats" && h(StatsPage, { txData: transactions, onRefresh: load, loading }),
+        page === "assets" && h(AssetsPage, { data: assets, dashData: dashboard, onUpdateGold: updateGoldPrice, onRefresh: load, loading }),
+        page === "wedding" && h(WeddingPage, { data: wedding, txData: transactions, onRefresh: load, loading }),
+        page === "investments" && h(InvestmentsPage, { data: investments, onRefresh: load, loading })
       ),
-      React.createElement("div", { style: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-around", padding: "6px 8px env(safe-area-inset-bottom, 10px)", zIndex: 100 } },
-        React.createElement(NavButton, { icon: "wallet", label: "Txns", active: page === "transactions", onClick: () => setPage("transactions") }),
-        React.createElement(NavButton, { icon: "layers", label: "Assets", active: page === "assets", onClick: () => setPage("assets") }),
-        React.createElement(NavButton, { icon: "ring", label: "Wedding", active: page === "wedding", onClick: () => setPage("wedding") }),
-        React.createElement(NavButton, { icon: "trending", label: "Invest", active: page === "investments", onClick: () => setPage("investments") })
+      h("div", { style: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-around", padding: "6px 8px env(safe-area-inset-bottom, 10px)", zIndex: 100 } },
+        h(NavButton, { icon: "wallet", label: "Txns", active: page === "transactions", onClick: () => setPage("transactions") }),
+        h(NavButton, { icon: "chart", label: "Stats", active: page === "stats", onClick: () => setPage("stats") }),
+        h(NavButton, { icon: "layers", label: "Assets", active: page === "assets", onClick: () => setPage("assets") }),
+        h(NavButton, { icon: "ring", label: "Wedding", active: page === "wedding", onClick: () => setPage("wedding") }),
+        h(NavButton, { icon: "trending", label: "Invest", active: page === "investments", onClick: () => setPage("investments") })
       )
     );
   }
-  ReactDOM.createRoot(document.getElementById("root")).render(/* @__PURE__ */ React.createElement(App, null));
+  ReactDOM.createRoot(document.getElementById("root")).render(h(App, null));
 })();
-
 </script>
 </body>
 </html>
