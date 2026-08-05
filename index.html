@@ -377,7 +377,7 @@
         h("div", { style: { color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 700, letterSpacing: 0.8 } }, "TOTAL CASH"),
         h("div", { style: { color: "#fff", fontSize: 32, fontWeight: 800, fontFamily: MONO, letterSpacing: -1, marginTop: 4 } }, fmt(data.balance)),
         h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 } },
-          [{ label: "Home", val: accts.home }, { label: "Lifestyle", val: accts.lifestyle }, { label: "Personal", val: accts.personal }, { label: "Savings", val: accts.savings }, { label: "Portfolio", val: accts.portfolio }].map((a) =>
+          [{ label: "Home", val: accts.home }, { label: "Lifestyle", val: accts.lifestyle }, { label: "Savings", val: accts.savings }, { label: "Portfolio", val: accts.portfolio }].map((a) =>
             h("div", { key: a.label, style: { flex: "1 1 30%", minWidth: 90, background: "rgba(255,255,255,0.12)", borderRadius: 12, padding: "8px 10px" } },
               h("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 9, fontWeight: 700, letterSpacing: 0.5, marginBottom: 2 } }, (ACCT_META[a.label]?.emoji || "") + " " + a.label.toUpperCase()),
               h("div", { style: { color: "#fff", fontSize: 14, fontWeight: 700, fontFamily: MONO } }, fmt(a.val))
