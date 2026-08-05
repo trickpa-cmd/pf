@@ -18,7 +18,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script>
 (() => {
-  const { useState, useEffect, useCallback, useMemo } = React;
+  const { useState, useEffect, useCallback } = React;
   const h = React.createElement;
 
   const toNum = (v) => {
@@ -34,7 +34,6 @@
   const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxtRIEhkYHpW9iNkOydrLOq96yfbN-GciPzIq6FUkSfsjZjqjP11gb1QC8Tp02zNgYTyQ/exec";
 
   // Firebase auth via REST API — no SDK needed.
-  // Signs in with the dedicated app account and caches the token; auto-refreshes before expiry.
   let _idToken = null;
   let _refreshToken = (() => { try { return localStorage.getItem("fb_refresh_token_v2"); } catch(e) { return null; } })();
   let _tokenExpiry = 0;
@@ -65,7 +64,6 @@
       } catch(e) {}
     }
 
-    // Sign in with dedicated app account
     const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FB_API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -113,7 +111,6 @@
   // Sheets backup sync — uses GET with payload in query string.
   // POST doesn't work because Google's 302 redirect converts POST→GET
   // before the script executes, so doPost never fires.
-  // GET survives the redirect and reaches doGet reliably.
   const sheetsSync = async (data) => {
     try {
       const payload = encodeURIComponent(JSON.stringify(data));
@@ -127,8 +124,6 @@
   };
 
   // Single sort function used EVERYWHERE for consistency.
-  // Date descending (newest day first), then push ID ascending within same day
-  // (matches Sheet row order since fullSyncSheetToFirebase creates IDs sequentially).
   const sortTx = (list) => list.slice().sort((a, b) => {
     if (a.date < b.date) return 1;
     if (a.date > b.date) return -1;
@@ -173,14 +168,26 @@
     amber: "#B7791F", amberLight: "#FFFAF0",
     gold: "#A67C00", goldLight: "#FFF8E1",
     purple: "#7C3AED", purpleLight: "#F3EEFF",
+    teal: "#0D9488", tealLight: "#E6FFF9",
     shadow: "0 1px 3px rgba(0,0,0,0.05)"
   };
+
+  // ————— Account & category system —————
+  // Envelope method: every account is an envelope with a monthly budget.
+  // Home/Lifestyle/Personal/Wedding are SPENDING envelopes (budget = max spend).
+  // Savings/Portfolio are SAVING envelopes (budget = contribution target).
+  const ACCT_OPTS = ["Home", "Lifestyle", "Personal", "Savings", "Portfolio", "Wedding"];
+  const SAVING_ACCTS = ["Savings", "Portfolio"];
   const ACCT_META = {
-    Home:      { emoji: "🏠", color: C.accent, light: C.accentLight },
-    Portfolio: { emoji: "📈", color: C.blue,   light: C.blueLight },
-    Lifestyle: { emoji: "✨", color: C.amber,  light: C.amberLight },
-    Wedding:   { emoji: "💍", color: C.purple, light: C.purpleLight }
+    Home:      { emoji: "🏠", color: C.accent, light: C.accentLight, desc: "Essentials, furniture, repairs, bills" },
+    Lifestyle: { emoji: "✨", color: C.amber,  light: C.amberLight, desc: "Shared fun — travel, dining, groceries, car" },
+    Personal:  { emoji: "🛍️", color: C.teal,   light: C.tealLight,  desc: "Yours — guilt-free spending" },
+    Savings:   { emoji: "💵", color: C.gold,   light: C.goldLight,  desc: "Future kids & emergency (USD/gold)" },
+    Portfolio: { emoji: "📈", color: C.blue,   light: C.blueLight,  desc: "IBKR investing" },
+    Wedding:   { emoji: "💍", color: C.purple, light: C.purpleLight, desc: "Wedding budget (deducts from Home)" }
   };
+  const CATEGORIES = ["Salary", "Groceries", "Dining", "Travel", "Car", "Shopping", "Furniture", "Repairs", "Bills", "Health", "Gifts", "Invest", "Transfer", "Other"];
+  const DEFAULT_BUDGETS = { Home: 2500, Lifestyle: 1250, Personal: 500, Savings: 750, Portfolio: 1000, Wedding: 0 };
 
   function Icon({ name, size = 18, color = C.sub }) {
     const d = {
@@ -193,7 +200,6 @@
     };
     if (name === "ring") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("circle", { cx: "12", cy: "14", r: "7" }), h("path", { d: "M8 6L12 2l4 4" }));
     if (name === "trending") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("polyline", { points: "23 6 13.5 15.5 8.5 10.5 1 18" }), h("polyline", { points: "17 6 23 6 23 12" }));
-    if (name === "gold") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("polygon", { points: "12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" }));
     if (name === "building") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("rect", { x: "4", y: "2", width: "16", height: "20", rx: "1" }), h("line", { x1: "9", y1: "6", x2: "9", y2: "6.01" }), h("line", { x1: "15", y1: "6", x2: "15", y2: "6.01" }), h("line", { x1: "9", y1: "10", x2: "9", y2: "10.01" }), h("line", { x1: "15", y1: "10", x2: "15", y2: "10.01" }), h("line", { x1: "9", y1: "14", x2: "9", y2: "14.01" }), h("line", { x1: "15", y1: "14", x2: "15", y2: "14.01" }), h("path", { d: "M10 22v-4h4v4" }));
     if (name === "layers") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("polygon", { points: "12 2 2 7 12 12 22 7 12 2" }), h("polyline", { points: "2 17 12 22 22 17" }), h("polyline", { points: "2 12 12 17 22 12" }));
     if (name === "chart") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8" }, h("path", { d: d.chart }), h("rect", { x: "3", y: "3", width: "18", height: "18", rx: "2" }));
@@ -202,6 +208,7 @@
     if (name === "search") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "2", strokeLinecap: "round" }, h("circle", { cx: "11", cy: "11", r: "7" }), h("line", { x1: "21", y1: "21", x2: "16.5", y2: "16.5" }));
     if (name === "chevL") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round" }, h("polyline", { points: "15 18 9 12 15 6" }));
     if (name === "chevR") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round" }, h("polyline", { points: "9 18 15 12 9 6" }));
+    if (name === "chevD") return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round" }, h("polyline", { points: "6 9 12 15 18 9" }));
     return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: name === "plus" ? "2.2" : "1.8", strokeLinecap: "round", strokeLinejoin: "round" }, h("path", { d: d[name] || d.home }));
   }
 
@@ -211,8 +218,8 @@
       h("span", { style: { fontSize: 10, fontWeight: active ? 700 : 500, color: active ? C.accent : C.muted, fontFamily: FONT } }, label)
     );
   }
-  function Card({ children, style }) {
-    return h("div", { style: { background: C.card, borderRadius: 16, padding: 20, border: `1px solid ${C.border}`, boxShadow: C.shadow, ...style } }, children);
+  function Card({ children, style, onClick }) {
+    return h("div", { onClick, style: { background: C.card, borderRadius: 16, padding: 20, border: `1px solid ${C.border}`, boxShadow: C.shadow, ...style } }, children);
   }
   function StatCard({ label, value, icon, color = C.accent, bg = C.accentLight }) {
     return h(Card, { style: { display: "flex", alignItems: "flex-start", gap: 14 } },
@@ -227,6 +234,20 @@
     return h("div", null,
       h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, label),
       h("input", { type, value, onChange: (e) => onChange(e.target.value), placeholder, inputMode, style: { width: "100%", padding: "10px 12px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14, fontFamily: FONT, background: C.bg, outline: "none", boxSizing: "border-box", color: C.text } })
+    );
+  }
+  function SelectField({ label, value, options, onChange }) {
+    return h("div", null,
+      h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, label),
+      h("select", { value, onChange: (e) => onChange(e.target.value), style: { width: "100%", padding: "10px 12px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14, fontFamily: FONT, background: C.bg, outline: "none", boxSizing: "border-box", color: C.text, cursor: "pointer" } },
+        options.map((o) => h("option", { key: o, value: o }, o))
+      )
+    );
+  }
+  function ProgressBar({ ratio, color, height = 8, track = C.bg }) {
+    const w = Math.min(Math.max(ratio, 0), 1) * 100;
+    return h("div", { style: { background: track, borderRadius: height / 2, height, overflow: "hidden" } },
+      h("div", { style: { width: `${w}%`, height: "100%", background: color, borderRadius: height / 2, transition: "width 0.3s" } })
     );
   }
   function PageLoader() {
@@ -253,10 +274,10 @@
   // ————— Transactions —————
   function TransactionsPage({ data, dashData, onAdd, onRefresh, onDelete, loading }) {
     const today = (new Date()).toISOString().split("T")[0];
-    const ACCT_OPTS = ["Home", "Portfolio", "Lifestyle", "Wedding"];
     const [showForm, setShowForm] = useState(false);
     const [date, setDate] = useState(today);
     const [notes, setNotes] = useState("");
+    const [category, setCategory] = useState("Other");
     const [incomeAmt, setIncomeAmt] = useState("");
     const [incomeAcc, setIncomeAcc] = useState("Lifestyle");
     const [expenseAmt, setExpenseAmt] = useState("");
@@ -271,13 +292,13 @@
 
     if (!data) return h(PageLoader, null);
     const accts = dashData?.accounts;
-    const filters = ["All", "Home", "Portfolio", "Lifestyle", "Wedding"];
+    const filters = ["All"].concat(ACCT_OPTS);
     const transactionsList = Array.isArray(data.transactions) ? data.transactions : [];
 
     const q = search.trim().toLowerCase();
     const filtered = transactionsList.filter((t) =>
       (filter === "All" || t.account === filter) &&
-      (!q || (t.notes || "").toLowerCase().includes(q))
+      (!q || (t.notes || "").toLowerCase().includes(q) || (t.category || "").toLowerCase().includes(q))
     );
 
     // Group by month, with per-month spend/income totals
@@ -302,7 +323,7 @@
     const canSave = (hasIncome || hasExpense) && amountsMatch && notes.trim() !== "";
 
     const resetForm = () => {
-      setDate(today); setNotes("");
+      setDate(today); setNotes(""); setCategory("Other");
       setIncomeAmt(""); setIncomeAcc("Lifestyle");
       setExpenseAmt(""); setExpenseAcc("Home");
       setFormError(""); setShowForm(false);
@@ -316,12 +337,13 @@
       setSaving(true);
       const prefix = isTransfer ? "⇆ " : "";
       const notesVal = prefix + notes.trim();
+      const cat = isTransfer ? "Transfer" : category;
       if (hasIncome) {
-        const r = await onAdd({ date, amount: String(Math.abs(Number(incomeAmt))), account: incomeAcc, notes: notesVal });
+        const r = await onAdd({ date, amount: String(Math.abs(Number(incomeAmt))), account: incomeAcc, notes: notesVal, category: cat });
         if (r && r.ok === false) { setSaving(false); setFormError(r.message || "Could not save."); return; }
       }
       if (hasExpense) {
-        const r = await onAdd({ date, amount: String(-Math.abs(Number(expenseAmt))), account: expenseAcc, notes: notesVal });
+        const r = await onAdd({ date, amount: String(-Math.abs(Number(expenseAmt))), account: expenseAcc, notes: notesVal, category: cat });
         if (r && r.ok === false) { setSaving(false); setFormError(r.message || "Could not save."); return; }
       }
       setSaving(false);
@@ -337,8 +359,8 @@
       setDeleteTarget(null);
     };
 
-    const acctSelect = (value, onChange, borderColor) => h("select", { value, onChange: (e) => onChange(e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, background: "#fff", color: C.text, outline: "none" } },
-      ACCT_OPTS.map((o) => h("option", { key: o, value: o }, o))
+    const acctSelect = (value, onChange) => h("select", { value, onChange: (e) => onChange(e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, background: "#fff", color: C.text, outline: "none" } },
+      ACCT_OPTS.map((o) => h("option", { key: o, value: o }, (ACCT_META[o]?.emoji || "") + " " + o))
     );
 
     return h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
@@ -351,35 +373,36 @@
           h("button", { onClick: () => { setShowForm(!showForm); setFormError(""); }, style: { background: C.accent, border: "none", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(45,90,39,0.35)" } }, h(Icon, { name: "plus", size: 18, color: "#fff" }))
         )
       ),
-      // Hero balance card
+      // Hero balance card — all envelopes
       accts && h(Card, { style: { background: `linear-gradient(135deg,${C.accent},#1B3B17)`, border: "none", padding: "20px 20px 16px" } },
         h("div", { style: { color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 700, letterSpacing: 0.8 } }, "TOTAL CASH"),
         h("div", { style: { color: "#fff", fontSize: 32, fontWeight: 800, fontFamily: MONO, letterSpacing: -1, marginTop: 4 } }, fmt(data.balance)),
-        h("div", { style: { display: "flex", gap: 8, marginTop: 14 } },
-          [{ label: "Home", val: accts.home, emoji: "🏠" }, { label: "Portfolio", val: accts.portfolio, emoji: "📈" }, { label: "Lifestyle", val: accts.lifestyle, emoji: "✨" }].map((a) =>
-            h("div", { key: a.label, style: { flex: 1, background: "rgba(255,255,255,0.12)", borderRadius: 12, padding: "8px 10px" } },
-              h("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 9, fontWeight: 700, letterSpacing: 0.5, marginBottom: 2 } }, a.emoji + " " + a.label.toUpperCase()),
+        h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 } },
+          [{ label: "Home", val: accts.home }, { label: "Lifestyle", val: accts.lifestyle }, { label: "Personal", val: accts.personal }, { label: "Savings", val: accts.savings }, { label: "Portfolio", val: accts.portfolio }].map((a) =>
+            h("div", { key: a.label, style: { flex: "1 1 30%", minWidth: 90, background: "rgba(255,255,255,0.12)", borderRadius: 12, padding: "8px 10px" } },
+              h("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 9, fontWeight: 700, letterSpacing: 0.5, marginBottom: 2 } }, (ACCT_META[a.label]?.emoji || "") + " " + a.label.toUpperCase()),
               h("div", { style: { color: "#fff", fontSize: 14, fontWeight: 700, fontFamily: MONO } }, fmt(a.val))
             )
           )
         )
       ),
       // Search bar
-      showSearch && h("input", { type: "text", value: search, autoFocus: true, onChange: (e) => setSearch(e.target.value), placeholder: "Search descriptions…", style: { width: "100%", padding: "11px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text, boxSizing: "border-box" } }),
+      showSearch && h("input", { type: "text", value: search, autoFocus: true, onChange: (e) => setSearch(e.target.value), placeholder: "Search descriptions or categories…", style: { width: "100%", padding: "11px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text, boxSizing: "border-box" } }),
       // New transaction form
       showForm && h(Card, { style: { border: `2px solid ${C.accent}`, padding: 16 } },
         h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14, color: C.text } }, "New Transaction"),
         h("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
           h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
             h(InputField, { label: "Date", type: "date", value: date, onChange: setDate }),
-            h(InputField, { label: "Description", value: notes, onChange: (v) => { setNotes(v); setFormError(""); }, placeholder: "e.g. salary, groceries" })
+            h(SelectField, { label: "Category", value: category, options: CATEGORIES, onChange: setCategory })
           ),
+          h(InputField, { label: "Description", value: notes, onChange: (v) => { setNotes(v); setFormError(""); }, placeholder: "e.g. salary, groceries, sofa" }),
           h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
             h("div", { style: { background: "#FFF5F5", border: `2px solid ${C.red}`, borderRadius: 12, padding: 12 } },
               h("div", { style: { fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 8, letterSpacing: 0.5 } }, "− EXPENSE"),
               h("div", { style: { marginBottom: 8 } },
                 h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Account"),
-                acctSelect(expenseAcc, setExpenseAcc, C.red)
+                acctSelect(expenseAcc, setExpenseAcc)
               ),
               h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Amount ($)"),
               h("input", { type: "number", inputMode: "decimal", min: "0", value: expenseAmt,
@@ -392,7 +415,7 @@
               h("div", { style: { fontSize: 11, fontWeight: 700, color: C.accent, marginBottom: 8, letterSpacing: 0.5 } }, "+ INCOME"),
               h("div", { style: { marginBottom: 8 } },
                 h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Account"),
-                acctSelect(incomeAcc, setIncomeAcc, C.accent)
+                acctSelect(incomeAcc, setIncomeAcc)
               ),
               h("label", { style: { fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" } }, "Amount ($)"),
               h("input", { type: "number", inputMode: "decimal", min: "0", value: incomeAmt,
@@ -425,7 +448,7 @@
                 return h("div", { key: row.key, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 16px", background: C.bg, borderBottom: `1px solid ${C.border}`, borderTop: i > 0 ? `1px solid ${C.border}` : "none" } },
                   h("span", { style: { fontSize: 11, fontWeight: 800, color: C.sub, letterSpacing: 0.6, textTransform: "uppercase" } }, row.label),
                   h("span", { style: { fontSize: 11, fontFamily: MONO, fontWeight: 600 } },
-                    h("span", { style: { color: C.accent } }, "+" + fmt(row.income).replace("$", "$")),
+                    h("span", { style: { color: C.accent } }, "+" + fmt(row.income)),
                     h("span", { style: { color: C.muted } }, "  ·  "),
                     h("span", { style: { color: C.red } }, fmt(row.spent))
                   )
@@ -440,7 +463,7 @@
                 ),
                 h("div", { style: { flex: 1, minWidth: 0 } },
                   h("div", { style: { fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.notes),
-                  h("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, t.account, " · ", t.date)
+                  h("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, t.account, t.category ? " · " + t.category : "", " · ", t.date)
                 ),
                 h("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 } },
                   h("div", { style: { fontSize: 14, fontWeight: 700, fontFamily: MONO, color: amt < 0 ? C.red : C.accent } },
@@ -468,31 +491,49 @@
     );
   }
 
-  // ————— Stats / Insights —————
-  function StatsPage({ txData, onRefresh, loading }) {
+  // ————— Budget / Stats —————
+  function StatsPage({ txData, budgets, onSaveBudgets, onRefresh, loading }) {
     const [month, setMonth] = useState(thisMonth());
+    const [expanded, setExpanded] = useState(null);
+    const [editBudgets, setEditBudgets] = useState(false);
+    const [budgetDraft, setBudgetDraft] = useState({});
+    const [savingBudgets, setSavingBudgets] = useState(false);
     if (!txData) return h(PageLoader, null);
     const txs = txData.transactions || [];
+    const B = { ...DEFAULT_BUDGETS, ...(budgets || {}) };
 
     const monthTxs = txs.filter((t) => (t.date || "").slice(0, 7) === month);
     const income = monthTxs.reduce((s, t) => s + Math.max(0, toNum(t.amount)), 0);
     const spent = monthTxs.reduce((s, t) => s + Math.min(0, toNum(t.amount)), 0);
-    const net = income + spent;
 
-    // Per-account breakdown for the month
-    const ACCOUNTS = ["Home", "Portfolio", "Lifestyle", "Wedding"];
-    const perAcct = ACCOUNTS.map((a) => {
+    // Per-envelope numbers for the month.
+    // Spending envelopes: progress = spent vs budget. Saving envelopes: progress = deposited vs target.
+    const perAcct = ACCT_OPTS.map((a) => {
       const list = monthTxs.filter((t) => t.account === a);
-      return {
-        account: a,
-        spent: list.reduce((s, t) => s + Math.min(0, toNum(t.amount)), 0),
-        income: list.reduce((s, t) => s + Math.max(0, toNum(t.amount)), 0)
-      };
+      const aSpent = Math.abs(list.reduce((s, t) => s + Math.min(0, toNum(t.amount)), 0));
+      const aIncome = list.reduce((s, t) => s + Math.max(0, toNum(t.amount)), 0);
+      const isSaving = SAVING_ACCTS.includes(a);
+      const used = isSaving ? aIncome : aSpent;
+      const budget = toNum(B[a]);
+      return { account: a, spent: aSpent, income: aIncome, isSaving, used, budget, list, over: budget > 0 && !isSaving && aSpent > budget };
     });
-    const maxSpent = Math.max(...perAcct.map((a) => Math.abs(a.spent)), 1);
-    const totalSpentAbs = Math.abs(spent) || 1;
 
-    // 6-month expense trend ending at selected month
+    const spendBudgetTotal = perAcct.filter((a) => !a.isSaving).reduce((s, a) => s + a.budget, 0);
+    const spendUsedTotal = perAcct.filter((a) => !a.isSaving).reduce((s, a) => s + a.spent, 0);
+
+    // Category breakdown for one expanded account
+    const catBreakdown = (list) => {
+      const map = {};
+      list.forEach((t) => {
+        const amt = toNum(t.amount);
+        if (amt >= 0) return;
+        const c = t.category || "Uncategorized";
+        map[c] = (map[c] || 0) + Math.abs(amt);
+      });
+      return Object.entries(map).map(([cat, val]) => ({ cat, val })).sort((x, y) => y.val - x.val);
+    };
+
+    // 6-month expense trend
     const trendMonths = [];
     for (let i = 5; i >= 0; i--) trendMonths.push(shiftMonth(month, -i));
     const trend = trendMonths.map((ym) => ({
@@ -501,65 +542,107 @@
     }));
     const trendMax = Math.max(...trend.map((t) => t.spent), 1);
 
-    // Top 5 expenses of the month
-    const topExpenses = monthTxs.filter((t) => toNum(t.amount) < 0).sort((a, b) => toNum(a.amount) - toNum(b.amount)).slice(0, 5);
-
-    // Days elapsed for daily average (full month if past, day-of-month if current)
     const isCurrent = month === thisMonth();
-    const [y, m] = month.split("-").map(Number);
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const daysElapsed = isCurrent ? (new Date()).getDate() : daysInMonth;
-    const dailyAvg = Math.abs(spent) / Math.max(daysElapsed, 1);
+
+    const startEditBudgets = () => {
+      const draft = {};
+      ACCT_OPTS.forEach((a) => { draft[a] = String(toNum(B[a])); });
+      setBudgetDraft(draft);
+      setEditBudgets(true);
+    };
+    const saveBudgets = async () => {
+      setSavingBudgets(true);
+      const clean = {};
+      ACCT_OPTS.forEach((a) => { clean[a] = toNum(budgetDraft[a]); });
+      await onSaveBudgets(clean);
+      setSavingBudgets(false);
+      setEditBudgets(false);
+    };
 
     return h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
       h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-        h("h2", { style: { margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: -0.3 } }, "Stats"),
+        h("h2", { style: { margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: -0.3 } }, "Budget"),
         h("button", { onClick: onRefresh, disabled: loading, style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.6 : 1 } }, h(Icon, { name: "refresh", size: 16, color: C.sub }))
       ),
       // Month selector
       h(Card, { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px" } },
-        h("button", { onClick: () => setMonth(shiftMonth(month, -1)), style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, h(Icon, { name: "chevL", size: 16, color: C.sub })),
+        h("button", { onClick: () => { setMonth(shiftMonth(month, -1)); setExpanded(null); }, style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, h(Icon, { name: "chevL", size: 16, color: C.sub })),
         h("div", { style: { fontSize: 15, fontWeight: 800, color: C.text } }, monthLabel(month)),
-        h("button", { onClick: () => setMonth(shiftMonth(month, 1)), disabled: isCurrent, style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, cursor: isCurrent ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: isCurrent ? 0.35 : 1 } }, h(Icon, { name: "chevR", size: 16, color: C.sub }))
+        h("button", { onClick: () => { setMonth(shiftMonth(month, 1)); setExpanded(null); }, disabled: isCurrent, style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, cursor: isCurrent ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: isCurrent ? 0.35 : 1 } }, h(Icon, { name: "chevR", size: 16, color: C.sub }))
       ),
-      // Summary
-      h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } },
-        [{ label: "INCOME", val: income, color: C.accent, bg: C.accentLight },
-         { label: "SPENT", val: spent, color: C.red, bg: C.redLight },
-         { label: "NET", val: net, color: net >= 0 ? C.blue : C.red, bg: net >= 0 ? C.blueLight : C.redLight }].map((s) =>
-          h(Card, { key: s.label, style: { padding: "12px 10px", textAlign: "center", background: s.bg, border: "none" } },
-            h("div", { style: { fontSize: 9, fontWeight: 800, color: s.color, letterSpacing: 0.8, marginBottom: 4 } }, s.label),
-            h("div", { style: { fontSize: 15, fontWeight: 800, fontFamily: MONO, color: s.color } }, fmt(s.val))
+      // Month overview: spent vs total spending budget
+      h(Card, { style: { padding: 18 } },
+        h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 } },
+          h("div", null,
+            h("span", { style: { fontSize: 24, fontWeight: 800, fontFamily: MONO, color: spendUsedTotal > spendBudgetTotal ? C.red : C.text } }, fmt(spendUsedTotal)),
+            h("span", { style: { fontSize: 13, color: C.muted, fontFamily: MONO } }, " / " + fmt(spendBudgetTotal))
+          ),
+          h("div", { style: { fontSize: 12, fontWeight: 700, color: spendUsedTotal > spendBudgetTotal ? C.red : C.accent } },
+            spendUsedTotal > spendBudgetTotal ? "OVER BUDGET" : fmt(spendBudgetTotal - spendUsedTotal) + " left"
           )
+        ),
+        h(ProgressBar, { ratio: spendBudgetTotal > 0 ? spendUsedTotal / spendBudgetTotal : 0, color: spendUsedTotal > spendBudgetTotal ? C.red : C.accent, height: 10 }),
+        h("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: C.muted, fontFamily: MONO } },
+          h("span", null, "Income: ", h("span", { style: { color: C.accent, fontWeight: 700 } }, "+" + fmt(income))),
+          h("span", null, "Net: ", h("span", { style: { color: income + spent >= 0 ? C.accent : C.red, fontWeight: 700 } }, fmt(income + spent)))
         )
       ),
-      // Daily average
-      h(Card, { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px" } },
-        h("div", { style: { fontSize: 13, fontWeight: 600, color: C.sub } }, "Daily average spend", isCurrent ? ` (${daysElapsed} days so far)` : ""),
-        h("div", { style: { fontSize: 16, fontWeight: 800, fontFamily: MONO, color: C.text } }, fmt(dailyAvg) + "/day")
-      ),
-      // Spending by account
-      h(Card, null,
-        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 14 } }, "Spending by Account"),
-        perAcct.every((a) => a.spent === 0)
-          ? h("div", { style: { padding: 12, textAlign: "center", color: C.muted, fontSize: 13 } }, "No spending this month")
-          : perAcct.filter((a) => a.spent < 0 || a.income > 0).map((a, i, arr) => {
-              const meta = ACCT_META[a.account];
-              const share = Math.abs(a.spent) / totalSpentAbs;
-              return h("div", { key: a.account, style: { marginBottom: i < arr.length - 1 ? 14 : 0 } },
-                h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
-                  h("span", { style: { fontSize: 13, fontWeight: 700 } }, meta.emoji + " " + a.account),
-                  h("span", { style: { fontSize: 12, fontFamily: MONO } },
-                    a.income > 0 ? h("span", { style: { color: C.accent, fontWeight: 600 } }, "+" + fmt(a.income) + "  ") : null,
-                    h("span", { style: { color: a.spent < 0 ? C.red : C.muted, fontWeight: 700 } }, fmt(a.spent)),
-                    a.spent < 0 ? h("span", { style: { color: C.muted } }, "  " + pct(share)) : null
-                  )
-                ),
-                h("div", { style: { background: C.bg, borderRadius: 4, height: 8, overflow: "hidden" } },
-                  h("div", { style: { width: `${Math.abs(a.spent) / maxSpent * 100}%`, height: "100%", background: meta.color, borderRadius: 4, transition: "width 0.3s" } })
+      // Envelope cards — tap to drill into categories + transactions
+      h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+        perAcct.filter((a) => a.budget > 0 || a.spent > 0 || a.income > 0).map((a) => {
+          const meta = ACCT_META[a.account];
+          const isOpen = expanded === a.account;
+          const ratio = a.budget > 0 ? a.used / a.budget : 0;
+          const barColor = a.isSaving ? meta.color : (a.over ? C.red : meta.color);
+          const cats = isOpen ? catBreakdown(a.list) : [];
+          const catMax = Math.max(...cats.map((c) => c.val), 1);
+          return h(Card, { key: a.account, style: { padding: "14px 16px", cursor: "pointer" }, onClick: () => setExpanded(isOpen ? null : a.account) },
+            h("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 } },
+              h("span", { style: { fontSize: 17 } }, meta.emoji),
+              h("div", { style: { flex: 1 } },
+                h("div", { style: { fontSize: 13.5, fontWeight: 800 } }, a.account,
+                  a.over ? h("span", { style: { color: C.red, fontSize: 10, fontWeight: 800, marginLeft: 6 } }, "OVER") : null
                 )
-              );
-            })
+              ),
+              h("div", { style: { textAlign: "right" } },
+                h("div", { style: { fontSize: 13, fontWeight: 800, fontFamily: MONO, color: a.isSaving ? meta.color : (a.over ? C.red : C.text) } },
+                  (a.isSaving ? "+" : "") + fmt(a.used),
+                  a.budget > 0 ? h("span", { style: { fontSize: 11, color: C.muted, fontWeight: 600 } }, " / " + fmt(a.budget)) : null
+                ),
+                h("div", { style: { fontSize: 10, color: C.muted } }, a.isSaving ? "saved this month" : (a.budget > 0 ? fmt(Math.max(a.budget - a.spent, 0)) + " left" : "spent"))
+              ),
+              h(Icon, { name: isOpen ? "chevD" : "chevR", size: 14, color: C.muted })
+            ),
+            h(ProgressBar, { ratio, color: barColor, height: 7 }),
+            // Drill-down: categories + transactions for this account this month
+            isOpen && h("div", { onClick: (e) => e.stopPropagation(), style: { marginTop: 14, cursor: "default" } },
+              cats.length > 0 && h("div", { style: { marginBottom: 12 } },
+                h("div", { style: { fontSize: 11, fontWeight: 800, color: C.sub, letterSpacing: 0.5, marginBottom: 8 } }, "WHERE IT WENT"),
+                cats.map((c) => h("div", { key: c.cat, style: { marginBottom: 8 } },
+                  h("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 3 } },
+                    h("span", { style: { fontSize: 12, fontWeight: 600 } }, c.cat),
+                    h("span", { style: { fontSize: 12, fontFamily: MONO, fontWeight: 700, color: C.red } }, fmt(-c.val),
+                      h("span", { style: { color: C.muted, fontWeight: 500 } }, "  " + Math.round(c.val / Math.max(a.spent, 1) * 100) + "%")
+                    )
+                  ),
+                  h(ProgressBar, { ratio: c.val / catMax, color: meta.color, height: 5 })
+                ))
+              ),
+              a.list.length > 0
+                ? h("div", null,
+                    h("div", { style: { fontSize: 11, fontWeight: 800, color: C.sub, letterSpacing: 0.5, marginBottom: 4 } }, "TRANSACTIONS"),
+                    a.list.map((t, i) => h("div", { key: t.id || i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: i < a.list.length - 1 ? `1px solid ${C.border}` : "none" } },
+                      h("div", { style: { minWidth: 0, flex: 1 } },
+                        h("div", { style: { fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.notes),
+                        h("div", { style: { fontSize: 10.5, color: C.muted } }, (t.category ? t.category + " · " : "") + t.date.slice(8) + " " + monthShort(month))
+                      ),
+                      h("span", { style: { fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: toNum(t.amount) < 0 ? C.red : C.accent, flexShrink: 0, marginLeft: 8 } }, fmt(t.amount))
+                    ))
+                  )
+                : h("div", { style: { fontSize: 12, color: C.muted, textAlign: "center", padding: 8 } }, "No transactions this month")
+            )
+          );
+        })
       ),
       // 6-month trend
       h(Card, null,
@@ -568,7 +651,7 @@
           trend.map((t) => {
             const active = t.ym === month;
             const barH = Math.max(t.spent / trendMax * 78, t.spent > 0 ? 4 : 2);
-            return h("div", { key: t.ym, onClick: () => setMonth(t.ym), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4, cursor: "pointer", height: "100%" } },
+            return h("div", { key: t.ym, onClick: () => { setMonth(t.ym); setExpanded(null); }, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4, cursor: "pointer", height: "100%" } },
               h("div", { style: { fontSize: 9, fontFamily: MONO, fontWeight: 600, color: active ? C.red : C.muted } }, t.spent > 0 ? fmt(t.spent).replace("$", "") : ""),
               h("div", { style: { width: "100%", maxWidth: 34, height: barH, background: active ? C.red : "#EBD4D4", borderRadius: 6 } }),
               h("div", { style: { fontSize: 10, fontWeight: active ? 800 : 500, color: active ? C.text : C.muted } }, monthShort(t.ym))
@@ -576,20 +659,33 @@
           })
         )
       ),
-      // Top expenses
-      topExpenses.length > 0 && h(Card, null,
-        h("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 10 } }, "Biggest Expenses"),
-        topExpenses.map((t, i) => {
-          const meta = ACCT_META[t.account] || { emoji: "💰" };
-          return h("div", { key: t.id || i, style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: i < topExpenses.length - 1 ? `1px solid ${C.border}` : "none" } },
-            h("span", { style: { fontSize: 14, width: 22, textAlign: "center" } }, meta.emoji),
-            h("div", { style: { flex: 1, minWidth: 0 } },
-              h("div", { style: { fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.notes),
-              h("div", { style: { fontSize: 11, color: C.muted } }, t.account, " · ", t.date)
-            ),
-            h("div", { style: { fontSize: 13, fontWeight: 700, fontFamily: MONO, color: C.red } }, fmt(t.amount))
-          );
-        })
+      // Budgets editor
+      h(Card, null,
+        h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+          h("div", { style: { fontSize: 14, fontWeight: 700 } }, "Monthly Budgets"),
+          !editBudgets && h("button", { onClick: startEditBudgets, style: { background: C.accentLight, color: C.accent, border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT } }, "Edit")
+        ),
+        !editBudgets
+          ? h("div", { style: { marginTop: 10 } },
+              ACCT_OPTS.filter((a) => toNum(B[a]) > 0).map((a, i, arr) => h("div", { key: a, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" } },
+                h("div", null,
+                  h("span", { style: { fontSize: 13, fontWeight: 700 } }, (ACCT_META[a]?.emoji || "") + " " + a),
+                  h("div", { style: { fontSize: 10.5, color: C.muted, marginTop: 1 } }, ACCT_META[a]?.desc || "")
+                ),
+                h("span", { style: { fontSize: 13, fontWeight: 800, fontFamily: MONO } }, fmt(B[a]), h("span", { style: { fontSize: 10, color: C.muted, fontWeight: 500 } }, "/mo"))
+              ))
+            )
+          : h("div", { style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 10 } },
+              ACCT_OPTS.map((a) => h("div", { key: a, style: { display: "flex", alignItems: "center", gap: 10 } },
+                h("span", { style: { fontSize: 13, fontWeight: 700, width: 100, flexShrink: 0 } }, (ACCT_META[a]?.emoji || "") + " " + a),
+                h("input", { type: "number", inputMode: "decimal", value: budgetDraft[a] || "", onChange: (e) => setBudgetDraft({ ...budgetDraft, [a]: e.target.value }), style: { flex: 1, padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, fontFamily: MONO, fontWeight: 700, background: C.bg, outline: "none", color: C.text } })
+              )),
+              h("div", { style: { fontSize: 11, color: C.muted, textAlign: "right", fontFamily: MONO } }, "Total: ", fmt(ACCT_OPTS.reduce((s, a) => s + toNum(budgetDraft[a]), 0)), "/mo"),
+              h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+                h("button", { onClick: () => setEditBudgets(false), style: { background: C.bg, color: C.sub, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 0", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: FONT } }, "Cancel"),
+                h("button", { onClick: saveBudgets, disabled: savingBudgets, style: { background: C.accent, color: "#fff", border: "none", borderRadius: 10, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: FONT, opacity: savingBudgets ? 0.7 : 1 } }, savingBudgets ? "Saving..." : "Save Budgets")
+              )
+            )
       )
     );
   }
@@ -843,16 +939,17 @@
     const [assets, setAssets] = useState(null);
     const [wedding, setWedding] = useState(null);
     const [investments, setInvestments] = useState(null);
+    const [budgets, setBudgets] = useState(null);
 
     // Compute all derived state from raw Firebase data and set all at once
-    const applyData = useCallback((txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv) => {
+    const applyData = useCallback((txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv, budgetsRaw) => {
       const gPrice = toNum(goldPrice);
       const list = txRaw ? sortTx(Object.entries(txRaw).map(([id, t]) => ({ ...t, id, amount: Number(t.amount) }))) : [];
 
       // Per-account running balances: walk chronologically (oldest → newest).
       // Wedding is a sub-account of Home — its transactions also move Home's
       // balance, and Wedding rows display Home's balance after the transaction.
-      const bals = { Home: 0, Portfolio: 0, Lifestyle: 0, Wedding: 0 };
+      const bals = { Home: 0, Portfolio: 0, Lifestyle: 0, Personal: 0, Savings: 0, Wedding: 0 };
       for (let i = list.length - 1; i >= 0; i--) {
         const t = list[i];
         if (t.account === "Wedding") {
@@ -867,10 +964,7 @@
         }
       }
 
-      const homebal = bals.Home;
-      const portbal = bals.Portfolio;
-      const lifebal = bals.Lifestyle;
-      const totalCash = homebal + portbal + lifebal;
+      const totalCash = bals.Home + bals.Portfolio + bals.Lifestyle + bals.Personal + bals.Savings;
 
       // Gold
       const goldEntries = goldEntriesRaw ? Object.entries(goldEntriesRaw).map(([id, e]) => {
@@ -893,11 +987,12 @@
 
       setTransactions({ transactions: list, balance: totalCash });
       setDashboard({
-        accounts: { home: homebal, portfolio: portbal, lifestyle: lifebal },
+        accounts: { home: bals.Home, portfolio: bals.Portfolio, lifestyle: bals.Lifestyle, personal: bals.Personal, savings: bals.Savings },
         netWorth: { totalCash, goldReserve: totalGoldValue, property: propTotal, ibkr, total: totalCash + totalGoldValue + propTotal + ibkr }
       });
       setAssets({ goldPrice: gPrice, totalGoldOz, totalGoldValue, goldEntries, properties });
       setWedding({ totalBudget: budget, totalSpent: -weddingSpent, remaining: budget - weddingSpent, percentUsed: budget > 0 ? weddingSpent / budget : 0 });
+      setBudgets(budgetsRaw || null);
       if (inv?.projections) {
         // Firebase stores arrays as objects with numeric keys — convert back
         const allocations = inv.allocations ? (Array.isArray(inv.allocations) ? inv.allocations : Object.values(inv.allocations)) : [];
@@ -909,12 +1004,12 @@
     const load = useCallback(async () => {
       setLoading(true);
       try {
-        const [txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv] = await Promise.all([
+        const [txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv, budgetsRaw] = await Promise.all([
           fb.get("transactions"), fb.get("goldPrice"), fb.get("goldEntries"),
-          fb.get("properties"), fb.get("weddingBudget"), fb.get("investments")
+          fb.get("properties"), fb.get("weddingBudget"), fb.get("investments"), fb.get("budgets")
         ]);
         if (!txRaw && goldPrice === null && !goldEntriesRaw) { setIsEmpty(true); return; }
-        applyData(txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv);
+        applyData(txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv, budgetsRaw);
       } finally {
         setLoading(false);
       }
@@ -928,7 +1023,6 @@
       const log = [];
       const addLog = (line) => { log.push(line); setMigrateStatus([...log]); };
       try {
-        // Step 1: test Firebase auth
         addLog("⋯ Testing Firebase auth…");
         let token;
         try {
@@ -939,7 +1033,6 @@
           return;
         }
 
-        // Step 2: fetch from Sheets
         addLog("⋯ Fetching data from Google Sheets…");
         let data;
         try {
@@ -952,7 +1045,6 @@
           return;
         }
 
-        // Step 3: test one Firebase write
         addLog("⋯ Testing Firebase write…");
         const testWrite = await fetch(`${FB}/goldPrice.json?auth=${token}`, { method: "PUT", body: JSON.stringify(data.goldPrice || 0) });
         if (!testWrite.ok) {
@@ -962,7 +1054,6 @@
         }
         addLog("✓ Firebase write OK");
 
-        // Step 4: write everything
         addLog("⋯ Writing all data to Firebase…");
         const writes = [];
         (data.transactions || []).forEach((t) => writes.push(
@@ -985,27 +1076,17 @@
     };
 
     const addTransaction = async (form) => {
-      const txData = { date: form.date, amount: Number(form.amount), account: form.account, notes: form.notes };
+      const txData = { date: form.date, amount: Number(form.amount), account: form.account, notes: form.notes, category: form.category || "Other" };
       // Optimistic — show instantly, sorted into correct position
       const optimisticId = "_opt_" + Date.now();
       setTransactions(prev => prev ? { ...prev, transactions: sortTx([{ ...txData, id: optimisticId }, ...prev.transactions]), balance: prev.balance + txData.amount } : prev);
-      setDashboard(prev => {
-        if (!prev) return prev;
-        const accts = { ...prev.accounts };
-        if (form.account === "Home") accts.home = toNum(accts.home) + txData.amount;
-        if (form.account === "Portfolio") accts.portfolio = toNum(accts.portfolio) + txData.amount;
-        if (form.account === "Lifestyle") accts.lifestyle = toNum(accts.lifestyle) + txData.amount;
-        if (form.account === "Wedding") accts.home = toNum(accts.home) + txData.amount; // wedding deducts from home
-        return { ...prev, accounts: accts };
-      });
       // Write to Firebase (fast)
       const result = await fb.post("transactions", txData);
       if (!result?.name) { await load(); return { ok: false, message: "Firebase write failed." }; }
-      // Replace optimistic ID with real Firebase ID, re-sort into correct position
       setTransactions(prev => prev ? { ...prev, transactions: sortTx(prev.transactions.map(t => t.id === optimisticId ? { ...t, id: result.name } : t)) } : prev);
       // Sync to Sheets in background (non-blocking)
       sheetsSync({ action: "addTransaction", ...form, firebaseId: result.name });
-      // Silent background reload so per-account running balances are recomputed
+      // Silent background reload recomputes account cards + running balances
       load();
       return { ok: true };
     };
@@ -1013,21 +1094,12 @@
     const deleteTransaction = async (transaction) => {
       // Optimistic remove
       setTransactions(prev => prev ? { ...prev, transactions: prev.transactions.filter(t => t.id !== transaction.id), balance: prev.balance - transaction.amount } : prev);
-      setDashboard(prev => {
-        if (!prev) return prev;
-        const accts = { ...prev.accounts };
-        if (transaction.account === "Home") accts.home = toNum(accts.home) - transaction.amount;
-        if (transaction.account === "Portfolio") accts.portfolio = toNum(accts.portfolio) - transaction.amount;
-        if (transaction.account === "Lifestyle") accts.lifestyle = toNum(accts.lifestyle) - transaction.amount;
-        if (transaction.account === "Wedding") accts.home = toNum(accts.home) - transaction.amount; // wedding deducts from home
-        return { ...prev, accounts: accts };
-      });
       // Delete from Firebase
       const ok = await fb.remove(`transactions/${transaction.id}`);
       if (!ok) { await load(); return { ok: false, message: "Firebase delete failed." }; }
       // Sync to Sheets in background
       sheetsSync({ action: "deleteTransaction", transaction });
-      // Silent background reload so per-account running balances are recomputed
+      // Silent background reload recomputes account cards + running balances
       load();
       return { ok: true };
     };
@@ -1036,6 +1108,11 @@
       await fb.put("goldPrice", Number(price));
       sheetsSync({ action: "updateGoldPrice", price });
       await load();
+    };
+
+    const saveBudgets = async (b) => {
+      await fb.put("budgets", b);
+      setBudgets(b);
     };
 
     if (!isUnlocked) return h(LockScreen, { onUnlock: () => setIsUnlocked(true) });
@@ -1048,14 +1125,14 @@
       ),
       h("div", { style: { padding: "0 16px 100px" } },
         page === "transactions" && h(TransactionsPage, { data: transactions, dashData: dashboard, onAdd: addTransaction, onRefresh: load, onDelete: deleteTransaction, loading }),
-        page === "stats" && h(StatsPage, { txData: transactions, onRefresh: load, loading }),
+        page === "stats" && h(StatsPage, { txData: transactions, budgets, onSaveBudgets: saveBudgets, onRefresh: load, loading }),
         page === "assets" && h(AssetsPage, { data: assets, dashData: dashboard, onUpdateGold: updateGoldPrice, onRefresh: load, loading }),
         page === "wedding" && h(WeddingPage, { data: wedding, txData: transactions, onRefresh: load, loading }),
         page === "investments" && h(InvestmentsPage, { data: investments, onRefresh: load, loading })
       ),
       h("div", { style: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-around", padding: "6px 8px env(safe-area-inset-bottom, 10px)", zIndex: 100 } },
         h(NavButton, { icon: "wallet", label: "Txns", active: page === "transactions", onClick: () => setPage("transactions") }),
-        h(NavButton, { icon: "chart", label: "Stats", active: page === "stats", onClick: () => setPage("stats") }),
+        h(NavButton, { icon: "chart", label: "Budget", active: page === "stats", onClick: () => setPage("stats") }),
         h(NavButton, { icon: "layers", label: "Assets", active: page === "assets", onClick: () => setPage("assets") }),
         h(NavButton, { icon: "ring", label: "Wedding", active: page === "wedding", onClick: () => setPage("wedding") }),
         h(NavButton, { icon: "trending", label: "Invest", active: page === "investments", onClick: () => setPage("investments") })
