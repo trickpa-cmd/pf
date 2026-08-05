@@ -506,19 +506,22 @@
     const spent = monthTxs.reduce((s, t) => s + Math.min(0, toNum(t.amount)), 0);
 
     // Per-envelope numbers for the month.
-    // Spending envelopes: progress = spent vs budget. Saving envelopes: progress = deposited vs target.
+    // Spending envelopes: progress = NET spent (expenses minus income) vs budget,
+    // so refunds/contributions add back to what's available.
+    // Saving envelopes: progress = deposited vs target.
     const perAcct = ACCT_OPTS.map((a) => {
       const list = monthTxs.filter((t) => t.account === a);
       const aSpent = Math.abs(list.reduce((s, t) => s + Math.min(0, toNum(t.amount)), 0));
       const aIncome = list.reduce((s, t) => s + Math.max(0, toNum(t.amount)), 0);
       const isSaving = SAVING_ACCTS.includes(a);
-      const used = isSaving ? aIncome : aSpent;
+      const net = aSpent - aIncome; // can be negative when income > spending
+      const used = isSaving ? aIncome : net;
       const budget = toNum(B[a]);
-      return { account: a, spent: aSpent, income: aIncome, isSaving, used, budget, list, over: budget > 0 && !isSaving && aSpent > budget };
+      return { account: a, spent: aSpent, income: aIncome, isSaving, used, budget, list, over: budget > 0 && !isSaving && net > budget };
     });
 
     const spendBudgetTotal = perAcct.filter((a) => !a.isSaving).reduce((s, a) => s + a.budget, 0);
-    const spendUsedTotal = perAcct.filter((a) => !a.isSaving).reduce((s, a) => s + a.spent, 0);
+    const spendUsedTotal = perAcct.filter((a) => !a.isSaving).reduce((s, a) => s + Math.max(a.used, 0), 0);
 
     // Category breakdown for one expanded account
     const catBreakdown = (list) => {
