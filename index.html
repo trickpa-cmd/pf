@@ -608,10 +608,10 @@
               ),
               h("div", { style: { textAlign: "right" } },
                 h("div", { style: { fontSize: 13, fontWeight: 800, fontFamily: MONO, color: a.isSaving ? meta.color : (a.over ? C.red : C.text) } },
-                  (a.isSaving ? "+" : "") + fmt(a.used),
+                  (a.isSaving ? "+" : "") + fmt(Math.max(a.used, 0)),
                   a.budget > 0 ? h("span", { style: { fontSize: 11, color: C.muted, fontWeight: 600 } }, " / " + fmt(a.budget)) : null
                 ),
-                h("div", { style: { fontSize: 10, color: C.muted } }, a.isSaving ? "saved this month" : (a.budget > 0 ? fmt(Math.max(a.budget - a.spent, 0)) + " left" : "spent"))
+                h("div", { style: { fontSize: 10, color: C.muted } }, a.isSaving ? "saved this month" : (a.budget > 0 ? fmt(a.budget - a.used) + " left" : "spent"))
               ),
               h(Icon, { name: isOpen ? "chevD" : "chevR", size: 14, color: C.muted })
             ),
