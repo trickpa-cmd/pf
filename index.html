@@ -176,18 +176,17 @@
   // Envelope method: every account is an envelope with a monthly budget.
   // Home/Lifestyle/Personal/Wedding are SPENDING envelopes (budget = max spend).
   // Savings/Portfolio are SAVING envelopes (budget = contribution target).
-  const ACCT_OPTS = ["Home", "Lifestyle", "Personal", "Savings", "Portfolio", "Wedding"];
+  const ACCT_OPTS = ["Home", "Lifestyle", "Savings", "Portfolio", "Wedding"];
   const SAVING_ACCTS = ["Savings", "Portfolio"];
   const ACCT_META = {
     Home:      { emoji: "🏠", color: C.accent, light: C.accentLight, desc: "Essentials, furniture, repairs, bills" },
-    Lifestyle: { emoji: "✨", color: C.amber,  light: C.amberLight, desc: "Shared fun — travel, dining, groceries, car" },
-    Personal:  { emoji: "🛍️", color: C.teal,   light: C.tealLight,  desc: "Yours — guilt-free spending" },
+    Lifestyle: { emoji: "✨", color: C.amber,  light: C.amberLight, desc: "Fun, personal, travel, dining, groceries, car" },
     Savings:   { emoji: "💵", color: C.gold,   light: C.goldLight,  desc: "Future kids & emergency (USD/gold)" },
     Portfolio: { emoji: "📈", color: C.blue,   light: C.blueLight,  desc: "IBKR investing" },
     Wedding:   { emoji: "💍", color: C.purple, light: C.purpleLight, desc: "Wedding budget (deducts from Home)" }
   };
   const CATEGORIES = ["Salary", "Groceries", "Dining", "Travel", "Car", "Shopping", "Furniture", "Repairs", "Bills", "Health", "Gifts", "Invest", "Transfer", "Other"];
-  const DEFAULT_BUDGETS = { Home: 2500, Lifestyle: 1250, Personal: 500, Savings: 750, Portfolio: 1000, Wedding: 0 };
+  const DEFAULT_BUDGETS = { Home: 2500, Lifestyle: 2000, Savings: 500, Portfolio: 1000, Wedding: 0 };
 
   function Icon({ name, size = 18, color = C.sub }) {
     const d = {
