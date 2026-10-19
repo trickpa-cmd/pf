@@ -43,47 +43,63 @@
     try { localStorage.setItem("fb_refresh_token_v2", t); } catch(e) {}
   };
 
-  const getAuthToken = async () => {
-    const now = Date.now();
-    if (_idToken && now < _tokenExpiry - 60000) return _idToken;
+  // No credentials live in this file. The user signs in on the lock screen;
+  // only the Firebase refresh token is kept in localStorage.
+  const AUTH_REQUIRED = "AUTH_REQUIRED";
+  let _onAuthLost = () => {};
 
-    if (_refreshToken) {
-      try {
-        const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FB_API_KEY}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(_refreshToken)}`
-        });
-        const d = await r.json();
-        if (d.id_token) {
-          _idToken = d.id_token;
-          _saveRefreshToken(d.refresh_token);
-          _tokenExpiry = now + parseInt(d.expires_in) * 1000;
-          return _idToken;
-        }
-      } catch(e) {}
-    }
+  const signOut = () => {
+    _idToken = null; _refreshToken = null; _tokenExpiry = 0;
+    try { localStorage.removeItem("fb_refresh_token_v2"); localStorage.removeItem("personal_finance_unlocked"); } catch(e) {}
+  };
 
+  const signIn = async (email, password) => {
     const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FB_API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "ziadehpatrick@gmail.com", password: "plko!!!1", returnSecureToken: true })
+      body: JSON.stringify({ email, password, returnSecureToken: true })
     });
     const d = await r.json();
-    if (!d.idToken) throw new Error("Firebase auth failed: " + JSON.stringify(d));
+    if (!d.idToken) {
+      const code = d.error?.message || "";
+      if (/INVALID|EMAIL_NOT_FOUND|PASSWORD/.test(code)) throw new Error("Wrong email or password");
+      if (/TOO_MANY_ATTEMPTS/.test(code)) throw new Error("Too many attempts. Try again later.");
+      throw new Error("Sign-in failed. Check your connection.");
+    }
     _idToken = d.idToken;
     _saveRefreshToken(d.refreshToken);
-    _tokenExpiry = now + parseInt(d.expiresIn) * 1000;
+    _tokenExpiry = Date.now() + parseInt(d.expiresIn) * 1000;
+  };
+
+  const getAuthToken = async () => {
+    const now = Date.now();
+    if (_idToken && now < _tokenExpiry - 60000) return _idToken;
+    if (!_refreshToken) { _onAuthLost(); throw new Error(AUTH_REQUIRED); }
+
+    const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FB_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(_refreshToken)}`
+    });
+    const d = await r.json();
+    if (!d.id_token) {
+      // Token revoked (e.g. password changed) — send the user back to sign-in.
+      if (r.status === 400 || r.status === 401) { signOut(); _onAuthLost(); throw new Error(AUTH_REQUIRED); }
+      throw new Error("Token refresh failed");
+    }
+    _idToken = d.id_token;
+    _saveRefreshToken(d.refresh_token);
+    _tokenExpiry = now + parseInt(d.expires_in) * 1000;
     return _idToken;
   };
 
   const fb = {
+    // Throws on network/auth errors so callers can tell "empty" from "failed".
     async get(path) {
-      try {
-        const token = await getAuthToken();
-        const r = await fetch(`${FB}/${path}.json?auth=${token}`);
-        return r.ok ? r.json() : null;
-      } catch(e) { return null; }
+      const token = await getAuthToken();
+      const r = await fetch(`${FB}/${path}.json?auth=${token}`);
+      if (!r.ok) throw new Error("Firebase read failed (" + r.status + ")");
+      return r.json();
     },
     async post(path, data) {
       try {
@@ -881,14 +897,17 @@
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
-    const handleSubmit = (e) => {
+    const [busy, setBusy] = useState(false);
+    const handleSubmit = async (e) => {
       e.preventDefault();
-      if (username === "finance" && password === "plko!!!1") {
-        setError("");
-        try { localStorage.setItem("personal_finance_unlocked", "true"); } catch (e2) {}
+      if (!username.trim() || !password) { setError("Enter your email and password"); return; }
+      setBusy(true); setError("");
+      try {
+        await signIn(username.trim(), password);
         onUnlock();
-      } else {
-        setError("Wrong username or password");
+      } catch (err) {
+        setError(err.message);
+        setBusy(false);
       }
     };
     return h("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.bg } },
@@ -896,10 +915,10 @@
         h("div", { style: { fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 6, textAlign: "center" } }, "Personal Finance"),
         h("div", { style: { fontSize: 13, color: C.sub, marginBottom: 18, textAlign: "center" } }, "Sign in to continue"),
         h("form", { onSubmit: handleSubmit, style: { display: "flex", flexDirection: "column", gap: 12 } },
-          h("input", { type: "text", name: "username", autoComplete: "username", value: username, onChange: (e) => { setUsername(e.target.value); if (error) setError(""); }, autoFocus: true, placeholder: "Username", style: { width: "100%", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text } }),
+          h("input", { type: "email", name: "email", autoComplete: "username", inputMode: "email", value: username, onChange: (e) => { setUsername(e.target.value); if (error) setError(""); }, autoFocus: true, placeholder: "Email", style: { width: "100%", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text } }),
           h("input", { type: "password", name: "password", autoComplete: "current-password", value: password, onChange: (e) => { setPassword(e.target.value); if (error) setError(""); }, placeholder: "Password", style: { width: "100%", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontFamily: FONT, background: C.card, outline: "none", color: C.text } }),
           error ? h("div", { style: { fontSize: 12, color: C.red, marginTop: -4 } }, error) : null,
-          h("button", { type: "submit", style: { background: C.accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: FONT } }, "Sign in")
+          h("button", { type: "submit", disabled: busy, style: { background: C.accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 16px", fontWeight: 700, fontSize: 14, cursor: busy ? "default" : "pointer", fontFamily: FONT, opacity: busy ? 0.7 : 1 } }, busy ? "Signing in..." : "Sign in")
         )
       )
     );
@@ -928,9 +947,9 @@
 
   // ————— App —————
   function App() {
-    const [isUnlocked, setIsUnlocked] = useState(() => {
-      try { return localStorage.getItem("personal_finance_unlocked") === "true"; } catch(e) { return false; }
-    });
+    const [isUnlocked, setIsUnlocked] = useState(() => !!_refreshToken);
+    const [loadError, setLoadError] = useState("");
+    useEffect(() => { _onAuthLost = () => setIsUnlocked(false); }, []);
     const [page, setPage] = useState("transactions");
     const [loading, setLoading] = useState(false);
     const [migrating, setMigrating] = useState(false);
@@ -1004,20 +1023,26 @@
     }, []);
 
     const load = useCallback(async () => {
+      if (!_refreshToken && !_idToken) return;
       setLoading(true);
       try {
         const [txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv, budgetsRaw] = await Promise.all([
           fb.get("transactions"), fb.get("goldPrice"), fb.get("goldEntries"),
           fb.get("properties"), fb.get("weddingBudget"), fb.get("investments"), fb.get("budgets")
         ]);
+        setLoadError("");
+        // Only offer the Sheets import when Firebase answered and is truly empty,
+        // never on a network or auth failure (that would duplicate data).
         if (!txRaw && goldPrice === null && !goldEntriesRaw) { setIsEmpty(true); return; }
         applyData(txRaw, goldPrice, goldEntriesRaw, propertiesRaw, weddingBudget, inv, budgetsRaw);
+      } catch (e) {
+        if (e.message !== AUTH_REQUIRED) setLoadError("Couldn't load your data. Check your connection and tap refresh.");
       } finally {
         setLoading(false);
       }
     }, [applyData]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => { if (isUnlocked) load(); }, [load, isUnlocked]);
 
     // One-time migration from Sheets → Firebase
     const migrateFromSheets = async () => {
@@ -1123,9 +1148,13 @@
     return h("div", { style: { fontFamily: FONT, background: C.bg, minHeight: "100vh", color: C.text, maxWidth: 480, margin: "0 auto", position: "relative" } },
       h("div", { style: { padding: "16px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" } },
         h("span", { style: { fontSize: 16, fontWeight: 800, letterSpacing: -0.3 } }, "Personal Finance"),
-        h("div", { style: { fontSize: 11, color: C.muted, fontFamily: MONO } }, (new Date()).toLocaleDateString("en-US", { month: "short", day: "numeric" }))
+        h("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
+          h("div", { style: { fontSize: 11, color: C.muted, fontFamily: MONO } }, (new Date()).toLocaleDateString("en-US", { month: "short", day: "numeric" })),
+          h("button", { onClick: () => { signOut(); setIsUnlocked(false); }, style: { background: "transparent", border: "none", color: C.sub, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT, padding: 0 } }, "Sign out")
+        )
       ),
       h("div", { style: { padding: "0 16px 100px" } },
+        loadError && h("div", { style: { background: C.redLight, color: C.red, border: `1px solid ${C.red}33`, borderRadius: 12, padding: "10px 14px", fontSize: 13, fontWeight: 600, marginBottom: 14 } }, loadError),
         page === "transactions" && h(TransactionsPage, { data: transactions, dashData: dashboard, onAdd: addTransaction, onRefresh: load, onDelete: deleteTransaction, loading }),
         page === "stats" && h(StatsPage, { txData: transactions, budgets, onSaveBudgets: saveBudgets, onRefresh: load, loading }),
         page === "assets" && h(AssetsPage, { data: assets, dashData: dashboard, onUpdateGold: updateGoldPrice, onRefresh: load, loading }),
