@@ -99,12 +99,12 @@ button{cursor:pointer;background:none;border:none}
 .pill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:600}
 .pill.pos{background:var(--brand-soft)} .pill.neg{background:var(--neg-soft)} .pill.warn{background:var(--warn-soft);color:var(--warn)}
 
-.acct-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:2px 16px 4px;scroll-snap-type:x mandatory}
-.acct-row::-webkit-scrollbar{display:none}
-@media (min-width:900px){.acct-row{margin:0;padding:2px 0 4px;display:grid;grid-template-columns:repeat(4,1fr)}}
-.acct{flex:0 0 auto;min-width:140px;scroll-snap-align:start;padding:14px 16px;text-align:left}
-.acct-name{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-2);font-weight:500}
-.acct-bal{font-size:18px;font-weight:600;margin-top:6px;letter-spacing:-.02em}
+.acct-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.acct{min-width:0;padding:10px 8px;border-radius:14px;text-align:left}
+.acct-name{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-name .dot{width:6px;height:6px}
+.acct-bal{font-size:14px;font-weight:600;margin-top:4px;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (min-width:600px){.acct-row{gap:8px}.acct{padding:14px 16px}.acct-name{font-size:13px;gap:7px}.acct-name .dot{width:8px;height:8px}.acct-bal{font-size:18px;margin-top:6px}}
 .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
 /* Progress */
@@ -288,6 +288,9 @@ button.row:hover{background:var(--surface-2)}
   // ————— Domain —————
   const ACCTS = ["Home", "Lifestyle", "Savings", "Portfolio", "Wedding"];
   const CASH_ACCTS = ["Home", "Lifestyle", "Savings", "Portfolio"];
+  // Archived accounts keep their history but are hidden from everyday screens.
+  const ARCHIVED = ["Wedding"];
+  const ACTIVE_ACCTS = ACCTS.filter((a) => !ARCHIVED.includes(a));
   const SAVING_ACCTS = ["Savings", "Portfolio"];
   const ACCT_META = {
     Home:      { color: "var(--a-home)",      desc: "Essentials, furniture, repairs, bills" },
@@ -544,7 +547,7 @@ button.row:hover{background:var(--surface-2)}
     h("div", { className: "skel", style: { height: 260 } }));
 
   // ————— Home —————
-  function HomePage({ d, go, openTx, openWedding, openSettings }) {
+  function HomePage({ d, go, openTx, openSettings }) {
     const B = d.budgets;
     const ms = monthStats(d.txs, thisMonth(), B);
     const left = ms.spendBudget - ms.spendUsed;
@@ -566,7 +569,7 @@ button.row:hover{background:var(--surface-2)}
       h("div", { className: "acct-row" },
         CASH_ACCTS.map((a) => h("button", { key: a, className: "card acct", onClick: () => go("activity", a) },
           h("div", { className: "acct-name" }, h(Dot, { c: ACCT_META[a].color }), a),
-          h("div", { className: "acct-bal num" }, money(d.bals[a]))))),
+          h("div", { className: "acct-bal num", title: money(d.bals[a]) }, Math.abs(d.bals[a]) >= 1e5 ? compact(d.bals[a]) : money(Math.round(d.bals[a])))))),
       h("div", { className: "section-title" }, h("h3", null, "This month"), h("button", { className: "link", onClick: () => go("budget") }, "Budget")),
       h(Card, { className: "pad" },
         h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 } },
@@ -581,12 +584,6 @@ button.row:hover{background:var(--surface-2)}
           h("div", { className: "kpi" }, h("div", { className: "label" }, "Spent"), h("div", { className: "v num" }, money(ms.spendUsed))),
           h("div", { className: "kpi" }, h("div", { className: "label" }, "Income"), h("div", { className: "v num pos" }, money(ms.income))),
           h("div", { className: "kpi" }, h("div", { className: "label" }, "Budget"), h("div", { className: "v num" }, money(ms.spendBudget))))),
-      d.wedding.budget > 0 && h("button", { className: "card pad", onClick: openWedding, style: { width: "100%", textAlign: "left", marginTop: 12, display: "block" } },
-        h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 12 } },
-          h("div", { className: "tile", style: { color: "var(--a-wedding)" } }, h(Icon, { n: "ring", s: 20 })),
-          h("div", { style: { flex: 1 } }, h("div", { style: { fontWeight: 600 } }, "Wedding fund"), h("div", { className: "row-sub" }, `${pct(d.wedding.ratio)} of ${money(d.wedding.budget)} used`)),
-          h("div", { style: { textAlign: "right" } }, h("div", { className: "num", style: { fontWeight: 600 } }, money(d.wedding.remaining)), h("div", { className: "row-meta" }, "remaining"))),
-        h(Bar, { ratio: d.wedding.ratio, color: "var(--a-wedding)" })),
       h("div", { className: "section-title" }, h("h3", null, "Recent"), h("button", { className: "link", onClick: () => go("activity") }, "See all")),
       h(Card, { className: "list" },
         d.txs.length ? d.txs.slice(0, 6).map((t) => h(TxRow, { key: t.id, t, onClick: () => openTx(t) }))
@@ -612,7 +609,7 @@ button.row:hover{background:var(--surface-2)}
       h("label", { className: "search" }, h("span", { className: "sr" }, "Search"), h(Icon, { n: "search", s: 19 }),
         h("input", { type: "search", value: search, onChange: (e) => setSearch(e.target.value), placeholder: "Search notes, categories, amounts" })),
       h("div", { className: "chips", role: "group", "aria-label": "Filter by account" },
-        ["All"].concat(ACCTS).map((a) => h("button", { key: a, className: "chip", "aria-pressed": filter === a, onClick: () => setFilter(a) },
+        ["All"].concat(ACTIVE_ACCTS, ARCHIVED.includes(filter) ? [filter] : []).map((a) => h("button", { key: a, className: "chip", "aria-pressed": filter === a, onClick: () => setFilter(a) },
           a !== "All" && h(Dot, { c: ACCT_META[a].color }), a))),
       groups.length === 0
         ? h(Card, { className: "empty", style: { marginTop: 16 } }, h("div", { className: "big" }, "🔍"), "Nothing matches.")
@@ -777,9 +774,10 @@ button.row:hover{background:var(--surface-2)}
         await onSave({ mode, amount: amt, account, toAccount, category: isTransfer ? "Transfer" : category, notes: notes.trim(), date });
       } catch (ex) { setErr(ex.message || "Couldn't save. Try again."); setBusy(false); }
     };
+    const acctOpts = editing && ARCHIVED.includes(initial.account) ? ACCTS : ACTIVE_ACCTS;
     const acctChips = (value, set, label) => h("div", { className: "field" },
       h("div", { className: "label" }, label),
-      h("div", { className: "chips", style: { margin: 0, padding: 0, flexWrap: "wrap" } }, ACCTS.map((a) => h("button", { type: "button", key: a, className: "chip", "aria-pressed": value === a, onClick: () => set(a) }, h(Dot, { c: ACCT_META[a].color }), a))));
+      h("div", { className: "chips", style: { margin: 0, padding: 0, flexWrap: "wrap" } }, acctOpts.map((a) => h("button", { type: "button", key: a, className: "chip", "aria-pressed": value === a, onClick: () => set(a) }, h(Dot, { c: ACCT_META[a].color }), a))));
     return h(Sheet, { title: editing ? "Edit transaction" : "New transaction", onClose },
       h("form", { onSubmit: submit, className: "stack", style: { gap: 16 } },
         h("div", { className: "seg", role: "group" },
@@ -820,10 +818,10 @@ button.row:hover{background:var(--surface-2)}
   function BudgetsForm({ budgets, onSave, onClose }) {
     const [draft, setDraft] = useState(() => Object.fromEntries(ACCTS.map((a) => [a, String(toNum(budgets[a]))])));
     const [busy, setBusy] = useState(false);
-    const total = ACCTS.reduce((s, a) => s + toNum(draft[a]), 0);
+    const total = ACTIVE_ACCTS.reduce((s, a) => s + toNum(draft[a]), 0);
     return h(Sheet, { title: "Monthly budgets", onClose },
       h("div", { className: "stack", style: { gap: 10 } },
-        ACCTS.map((a) => h("label", { key: a, style: { display: "flex", alignItems: "center", gap: 12 } },
+        ACTIVE_ACCTS.map((a) => h("label", { key: a, style: { display: "flex", alignItems: "center", gap: 12 } },
           h("div", { style: { flex: 1, minWidth: 0 } },
             h("div", { style: { display: "flex", alignItems: "center", gap: 8, fontWeight: 600 } }, h(Dot, { c: ACCT_META[a].color }), a),
             h("div", { className: "row-sub" }, ACCT_META[a].desc)),
@@ -846,8 +844,8 @@ button.row:hover{background:var(--surface-2)}
   function WeddingSheet({ d, onClose, openTx }) {
     const w = d.wedding;
     const txs = d.txs.filter((t) => t.account === "Wedding");
-    return h(Sheet, { title: "Wedding fund", onClose },
-      h("div", { className: "label" }, "Remaining"),
+    return h(Sheet, { title: "Wedding fund · archived", onClose },
+      h("div", { className: "label" }, "Left unspent"),
       h("div", { className: "num", style: { fontSize: 32, fontWeight: 700, letterSpacing: "-.03em", margin: "2px 0 12px" } }, money(w.remaining)),
       h(Bar, { ratio: w.ratio, color: "var(--a-wedding)", height: 10 }),
       h("div", { className: "mini-row muted", style: { marginTop: 8 } }, h("span", { className: "num" }, `Spent ${money(w.spent)}`), h("span", { className: "num" }, `Budget ${money(w.budget)}`)),
@@ -855,11 +853,17 @@ button.row:hover{background:var(--surface-2)}
       h(Card, { className: "list" }, txs.length ? txs.map((t) => h(TxRow, { key: t.id, t, onClick: () => openTx(t) })) : h("div", { className: "empty" }, "No wedding payments yet")));
   }
 
-  function SettingsSheet({ onRefresh, onSignOut, onClose, lastSync }) {
+  function SettingsSheet({ onRefresh, onSignOut, onClose, lastSync, openWedding }) {
     return h(Sheet, { title: "Account", onClose },
       h("div", { className: "stack", style: { gap: 10 } },
         h("div", { className: "muted", style: { fontSize: 13 } }, DEMO ? "Demo mode — changes stay in this tab." : lastSync ? `Last synced ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""),
         h("button", { className: "btn btn-ghost", onClick: () => { onRefresh(); onClose(); } }, h(Icon, { n: "refresh", s: 18 }), "Refresh data"),
+        h("div", { className: "label", style: { marginTop: 10 } }, "Archive"),
+        h(Card, { className: "list" },
+          h("button", { className: "row", onClick: openWedding },
+            h("div", { className: "tile", style: { color: "var(--a-wedding)" } }, h(Icon, { n: "ring", s: 20 })),
+            h("div", { className: "row-main" }, h("div", { className: "row-title" }, "Wedding fund"), h("div", { className: "row-sub" }, "Budget and payments")),
+            h("span", { className: "faint" }, h(Icon, { n: "chevR", s: 18 })))),
         !DEMO && h("button", { className: "btn btn-danger", onClick: onSignOut }, h(Icon, { n: "logout", s: 18 }), "Sign out")));
   }
 
@@ -1026,7 +1030,7 @@ button.row:hover{background:var(--surface-2)}
     let content;
     if (status === "error" && !d) content = h(Card, { className: "empty", style: { marginTop: 40 } }, h("div", { className: "big" }, "📡"), error, h("div", { style: { marginTop: 14 } }, h("button", { className: "btn btn-ghost btn-sm", onClick: load }, "Try again")));
     else if (!d) content = h(Skeleton);
-    else if (page === "home") content = h(HomePage, { d, go, openTx, openWedding: () => setSheet({ type: "wedding" }), openSettings: () => setSheet({ type: "settings" }) });
+    else if (page === "home") content = h(HomePage, { d, go, openTx, openSettings: () => setSheet({ type: "settings" }) });
     else if (page === "activity") content = h(ActivityPage, { d, filter, setFilter, openTx });
     else if (page === "budget") content = h(BudgetPage, { d, editBudgets: () => setSheet({ type: "budgets" }) });
     else content = h(WealthPage, { d, editGold: () => setSheet({ type: "gold" }) });
@@ -1052,7 +1056,7 @@ button.row:hover{background:var(--surface-2)}
       sheet?.type === "budgets" && d && h(BudgetsForm, { budgets: d.budgets, onSave: saveBudgets, onClose: close }),
       sheet?.type === "gold" && d && h(GoldForm, { price: d.gold.price, onSave: saveGold, onClose: close }),
       sheet?.type === "wedding" && d && h(WeddingSheet, { d, onClose: close, openTx }),
-      sheet?.type === "settings" && h(SettingsSheet, { onClose: close, onRefresh: load, lastSync: lastLoad.current ? new Date(lastLoad.current) : null, onSignOut: () => { signOut(); setSheet(null); setRaw(null); setAuthed(false); } }),
+      sheet?.type === "settings" && h(SettingsSheet, { onClose: close, onRefresh: load, openWedding: () => setSheet({ type: "wedding" }), lastSync: lastLoad.current ? new Date(lastLoad.current) : null, onSignOut: () => { signOut(); setSheet(null); setRaw(null); setAuthed(false); } }),
       toast && h("div", { className: "toast", role: "status" }, toast.msg,
         toast.action && h("button", { onClick: () => { setToast(null); toast.action.run(); } }, toast.action.label)));
   }
